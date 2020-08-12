@@ -1,0 +1,550 @@
+---
+title: "growth_rates"
+author: "Guy Mercer"
+date: "12/08/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+Initially I looked at the effects of 1% DMSO, 1% Methanol and 1% DMSO + 1% Methanol on growth rates in comparison to controls in media alone. 
+
+Growth curves were generated using a BMG Microplate Reader.Initially, the plate reading settings were:  
+
+* Number of Cycles - 192
+
+* Cycle Length - 300s
+
+* Wavelength - 600nm
+
+* Temperature - 30°C
+
+* Shake - Before Each Cycle (20s)
+
+* Shake Mode - Double Orbital
+
+* Shake Frequency - 200rpm
+
+The plate reader outputs the data in a very odd format so the first thing to do is remove all the unnecessary information and convert time into minutes. I used zsh for this. 
+
+```{zsh raw-file-formatting, echo = TRUE}
+#!/usr/bin/env zsh
+
+# setwd
+cd /Users/guy/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/dmso_methanol_sens/
+
+source ./WHATIDID_func.sh
+
+format_growth_assay_data dmso_methanol_sens_raw_mixture_2020_07_15 dmso_meth_2020_07_15
+
+```
+
+After this point I worked in R. I used the packages:
+
+```{r, include = FALSE}
+library(tidyverse)
+library(plyr)
+library(knitr)
+``` 
+```{r, include = TRUE}
+r_packages <- installed.packages()[names(sessionInfo()$otherPkgs), "Version"]
+
+r_packages_df <- as.data.frame(r_packages)
+
+colnames(r_packages_df) <- c("Version")
+
+kable(r_packages_df)
+```
+
+The data first needed to be blank corrected. 
+
+```{r, include = FALSE}
+# set wd
+setwd("~/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/dmso_methanol_sens/")
+# read csv
+dmso_meth_sens <- read.csv(file = "./results/dmso_meth_2020_07_15_formatted.csv", header = FALSE, stringsAsFactors = FALSE)
+
+sens_data_form <- function(sens_data) {
+  # transpose
+  sens_data_trans <- t(sens_data)
+  # save first row as colnames
+  colnames(sens_data_trans) <- sens_data_trans [1, ]
+  # delete first row, which is now duplicate of colnames
+  sens_data_colnames <- sens_data_trans [-1, ]
+  # remove any empty rows. Sometimes created when importing csv file 
+  sens_data_no_blanks <- sens_data_colnames[rowSums(is.na(sens_data_colnames)) != ncol(sens_data_colnames),]
+  # save first column as rownames
+  rownames(sens_data_no_blanks) <- sens_data_no_blanks [ ,1]
+  # delete first column, which is now duplicate of rownames
+  sens_data_rownames <- sens_data_no_blanks [ ,-1]
+  # convert matrix into dataframe
+  sens_data_df <- as.data.frame(sens_data_rownames)
+  # extract blanks and save as separate dataframe
+  blanks <- sens_data_df %>% select(starts_with("blank"))
+  # convert blanks from factor to numeric
+  indx <- sapply(blanks, is.factor)
+  blanks[indx] <- lapply(blanks[indx], function(x) as.numeric(as.character(x)))
+  # blanks mean for each time point
+  blanks_mean <- rowMeans(blanks[,c(1:ncol(blanks))])
+  # remove blanks from sens_data_df
+  sens_data_nb <- sens_data_df %>% select(-(starts_with("blank")))
+  # add blank_means
+  sens_data_nb$blanks_mean = blanks_mean
+  # convert into numerics from factors for whole dataframe
+  indx2 <- sapply(sens_data_nb, is.factor)
+  sens_data_nb[indx2] <- lapply(sens_data_nb[indx2], function(x) as.numeric(as.character(x)))
+  # substract blank_means from other columns
+  sens_data_nb[1:ncol(sens_data_nb)] <- sens_data_nb[1:ncol(sens_data_nb)] - sens_data_nb$blanks_mean
+  # remove empty blanks_mean column 
+  sens_data_corr <- sens_data_nb %>% select(-(starts_with("blank")))
+}
+
+sens_data_corr <- sens_data_form(dmso_meth_sens)
+
+```
+
+Here are the untransformed growth curves (OD vs Time):
+
+```{r}
+treatments <- c("control", "dmso", "methanol", "mixture")
+
+untransformed_growth_curves <- function(treatments, sens_data_corr) {
+  
+summ_stats_all_treatments <- data.frame(matrix(nrow = 193, ncol = length(treatments)))
+colnames(summ_stats_all_treatments) <- treatments
+
+for (i in 1:length(treatments)) {
+  
+# extract only treatment x
+treatment <- sens_data_corr %>% select(starts_with(treatments[i]))
+# create time 
+time <- seq(0, 960, 5)
+# add time to first column 
+treatment$time <- time
+# convert from wide to long data format
+treatment_long <- treatment %>% gather(condition, OD, -time)
+# order treatment_long by time
+treatment_long_ord_time <- treatment_long[order(treatment_long$time),]
+# convert condition column to treatment
+treatment_long_ord_time$condition <- c("treatment")
+# summary stats
+summ_stats_treatment <- ddply(treatment_long_ord_time, c("time", "condition"), summarise, 
+                              N    = length(OD), 
+                              mean = mean(OD), 
+                              sd   = sd(OD), 
+                              se   = sd / sqrt(N)
+)
+
+summ_stats_all_treatments[ , i] <- summ_stats_treatment [ , 4]
+}
+summ_stats_all_treatments$time <- time 
+
+summ_stats_all_treatments_long <- summ_stats_all_treatments %>% gather(condition, OD, -time)
+
+summ_stats_all_treatments_long
+}
+
+meanOD_all_treatments_untransformed <- untransformed_growth_curves(treatments, sens_data_corr)
+
+one_graph_combined <- function(time_cond_OD, y_label) {
+  
+one_graph <- ggplot(data = time_cond_OD, aes(x=time, y=OD)) + 
+  geom_line(aes(colour=condition), alpha=0.4) +
+  ggtitle("") +
+  xlab(expression(Time)) +
+  ylab(y_label) +
+  theme(panel.background = element_rect(fill = "white"), plot.margin = margin(1, 1, 1, 1, "cm"),
+  axis.line = element_line(), plot.background = element_rect(
+    fill = "grey90",
+    colour = "black",
+    size = 1
+  )
+  )
+
+one_graph
+
+}
+y_label <- "OD"
+treatments_on_one_graph <- one_graph_combined(meanOD_all_treatments_untransformed, y_label)
+
+treatments_on_one_graph
+```
+
+And this is what they look like once OD~t~ -> ln(OD~t~). This is done to calculate the growth rate, which is the gradient of the exponential phase. 
+
+```{r}
+treatments <- c("control", "dmso", "methanol", "mixture")
+
+nodivt0_growth_curves <- function(treatments, sens_data_corr) {
+  
+  summ_stats_all_treatments <- data.frame(matrix(nrow = 193, ncol = length(treatments)))
+  colnames(summ_stats_all_treatments) <- treatments
+  
+  for (i in 1:length(treatments)) {
+    
+    # extract only treatment x
+    treatment <- sens_data_corr %>% select(starts_with(treatments[i]))
+    # create time 
+    time <- seq(0, 960, 5)
+    # log transform everything
+    log_treatment <- log(treatment)
+    # add time to first column 
+    log_treatment$time <- time
+    # convert from wide to long data format
+    treatment_long <- log_treatment %>% gather(condition, OD, -time)
+    # order treatment_long by time
+    treatment_long_ord_time <- treatment_long[order(treatment_long$time),]
+    # convert condition column to treatment
+    treatment_long_ord_time$condition <- c("treatment")
+    # summary stats
+    summ_stats_treatment <- ddply(treatment_long_ord_time, c("time", "condition"), summarise, 
+                                  N    = length(OD), 
+                                  mean = mean(OD), 
+                                  sd   = sd(OD), 
+                                  se   = sd / sqrt(N)
+    )
+    
+    summ_stats_all_treatments[ , i] <- summ_stats_treatment [ , 4]
+  }
+  summ_stats_all_treatments$time <- time 
+  
+  summ_stats_all_treatments_long <- summ_stats_all_treatments %>% gather(condition, OD, -time)
+  
+  summ_stats_all_treatments_long
+}
+
+meanOD_all_treatments_nodivt0 <- nodivt0_growth_curves(treatments, sens_data_corr)
+
+y_label <- "ln(OD)"
+
+treatments_on_one_graph <- one_graph_combined(meanOD_all_treatments_nodivt0, y_label)
+
+treatments_on_one_graph
+
+```
+
+To get all the treatments to start from 0 ln(OD~t~/OD~0~) was performed. 
+
+```{r}
+treatments <- c("control", "dmso", "methanol", "mixture")
+
+divt0_growth_curves <- function(treatments, sens_data_corr) {
+  
+  summ_stats_all_treatments <- data.frame(matrix(nrow = 193, ncol = length(treatments)))
+  colnames(summ_stats_all_treatments) <- treatments
+  
+  for (i in 1:length(treatments)) {
+    
+    # extract only treatment x
+    treatment <- sens_data_corr %>% select(starts_with(treatments[i]))
+    # divide by t0
+    treatment_repl <- seq(1, ncol(treatment), 1)
+    treatment_from_1 <- data.frame(matrix(nrow = 193, ncol = ncol(treatment)))
+    
+    for (j in 1:length(treatment_repl)) {
+      treatment_divide_t0 <- treatment [ , treatment_repl[j]] / treatment [1, treatment_repl[j]]
+      treatment_from_1[ , treatment_repl[j]] <- treatment_divide_t0
+    } 
+    # create time 
+    time <- seq(0, 960, 5)
+    # log transform everything
+    log_treatment <- log(treatment_from_1)
+    # add time to first column 
+    log_treatment$time <- time
+    # convert from wide to long data format
+    treatment_long <- log_treatment %>% gather(condition, OD, -time)
+    # order treatment_long by time
+    treatment_long_ord_time <- treatment_long[order(treatment_long$time),]
+    # convert condition column to treatment
+    treatment_long_ord_time$condition <- c("treatment")
+    # summary stats
+    summ_stats_treatment <- ddply(treatment_long_ord_time, c("time", "condition"), summarise, 
+                                  N    = length(OD), 
+                                  mean = mean(OD), 
+                                  sd   = sd(OD), 
+                                  se   = sd / sqrt(N)
+    )
+    
+    summ_stats_all_treatments[ , i] <- summ_stats_treatment [ , 4]
+  }
+  summ_stats_all_treatments$time <- time 
+  
+  summ_stats_all_treatments_long <- summ_stats_all_treatments %>% gather(condition, OD, -time)
+  
+  summ_stats_all_treatments_long
+}
+
+y_label <- "ln(OD[t]/OD[0])"
+
+meanOD_all_treatments_divt0 <- divt0_growth_curves(treatments, sens_data_corr)
+
+treatments_on_one_graph <- one_graph_combined(meanOD_all_treatments_divt0, y_label)
+
+treatments_on_one_graph
+```
+
+Although the starting yeast stock volume should have been the same for all treatments, dividing by OD~0~ showed this clearly wasn't the case. The smaller volume that was pipetted into DMSO resulted in a higher final ln(OD~t~/OD~0~).
+
+Each treatment began with yeast cells in the log phase (0.4-0.6OD). Cells were then diluted to a final OD of 0.05 in the microplate well. On visual inspection there doesn't seem to be much difference between the growth rates of the treatments. To quantify growth rates, either the maximum growth rate can be calculated, or the growth rate across a broader time interval. The second option accounts for random fluctuations in growth rate. I chose the second option. To determine the time interval used to measure the growth rate, ln(OD~t~/OD~0~) vs time was plotted for 5 time point intervals. For example, t = 0,5,10,15,20. The slope (growth rate) was calculated and saved. The same was done for all 5 time point intervals and time points associated with slopes that were ≥95% of the maximum slope were used to calculate the final growth rate. 
+
+```{r}
+treatments <- c("control", "dmso", "methanol", "mixture")
+
+maximum_growth_rate <- function(treatments, sens_data_corr) {
+
+  max_slopes_table <- tibble()
+  
+  
+  for (i in 1:length(treatments)) {
+    
+    # extract only treatment x
+    treatment <- sens_data_corr %>% select(starts_with(treatments[i]))
+    # divide by t0
+    treatment_repl <- seq(1, ncol(treatment), 1)
+    treatment_from_1 <- data.frame(matrix(nrow = 193, ncol = ncol(treatment)))
+    
+    for (j in 1:length(treatment_repl)) {
+      treatment_divide_t0 <- treatment [ , treatment_repl[j]] / treatment [1, treatment_repl[j]]
+      treatment_from_1[ , treatment_repl[j]] <- treatment_divide_t0
+    } 
+    
+    # create time 
+    time <- seq(0, 960, 5)
+    # log transform everything
+    log_treatment <- log(treatment_from_1)
+    # add time to first column 
+    log_treatment$time <- time
+    # convert from wide to long data format
+    treatment_long <- log_treatment %>% gather(condition, OD, -time)
+    # order treatment_long by time
+    treatment_long_ord_time <- treatment_long[order(treatment_long$time),]
+    # convert condition column to treatment
+    treatment_long_ord_time$condition <- c("treatment")
+    # summary stats
+    summ_stats_treatment <- ddply(treatment_long_ord_time, c("time", "condition"), summarise, 
+                                  N    = length(OD), 
+                                  mean = mean(OD), 
+                                  sd   = sd(OD), 
+                                  se   = sd / sqrt(N)
+    )
+    
+    # calcularing gradient of 5 time point windows along linearised treatment growth curve. 
+    time_mean_treatment <- summ_stats_treatment [ , c(1,4)]
+    VAR <- seq(1, 189, 1)
+    treatment_tframeslope <- data.frame(matrix(nrow = 189, ncol = 1))
+    
+    
+    for (k in 1:length(VAR)) {
+      treatment_window <- time_mean_treatment [((VAR[k]):(VAR[k]+4)), ]
+      treatment_lm <- lm(formula = mean ~ time, data = treatment_window)
+      treatment_slope <- treatment_lm$coefficients[2]
+      treatment_tframeslope[VAR[k] , ] <- treatment_slope
+      
+    }
+    
+    start <- seq (0, 940, 5)
+    
+    end <- seq (20, 960, 5)
+    
+    treatment_gradients <- data.frame(start_time=start, end_time=end, slope=treatment_tframeslope)
+    
+    colnames(treatment_gradients) <- c("start_time", "end_time", "slope")
+    
+    colMax <- function(data) sapply(data, max, na.rm = TRUE)
+    
+    # find the maximum slope and return windows that are ≥ 95% of the maximum gradient
+    treatment_max <- colMax(treatment_gradients)
+    
+    treatment_max_df <- data.frame(treatment_max)
+    
+    treatment_max_slope <- treatment_max_df [3, 1]
+    
+    treatment_expo_phase_timepoints <- which(treatment_gradients$slope >= (0.95*treatment_max_slope))
+    
+    # mistake here. Not populating dataframe cell with more than one value
+    
+    
+    max_slopes_table [i , 1] <- treatment_max_slope
+    
+    max_slopes_table [i , 2] <- treatments[i]
+    
+    max_slopes_table [i , 3] <- list(list(treatment_expo_phase_timepoints))
+    
+  }
+  colnames(max_slopes_table) <- c("Maximum Gradient", "Treatment", "Timepoint Windows ≥95% of Maximum Gradient")
+  
+  max_slopes_table
+}
+maximum_growth_rate_table <- maximum_growth_rate(treatments, sens_data_corr)
+
+kable(maximum_growth_rate_table, caption = "Maximum Gradients of DMSO, Methanol and DMSO+Methanol Treated Yeast Cells and Associated Timepoint Windows")
+```
+
+To try and extend the log phase, the volume of yeast stock was varied so that the final OD in the microplate well was = 0.05 (x1), 0.01 (x5), 0.005 (x10), 0.0025 (x20), 0.001 (x50) and 0.0005 (x100). The idea behind this being that if wells were inoculated with a lower yeast concentration initially then the nutrients in the medium wouldn't be exhausted as quickly, resulting in a longer log phase. This wasn't the case using the settings detailed at the beginning of this document. Here are the untransformed results:
+
+```{zsh, include = FALSE}
+#!/usr/bin/env zsh
+
+source ./WHATIDID_func.sh
+
+format_growth_assay_data yeast_starting_vol_2020_07_22 yeast_start_vol_2020_07_22
+ 
+```
+```{r, echo = FALSE}
+treatments <- c("1-", "5-", "10-", "20-", "50-", "100-")
+
+yeast_well_vol <- read.csv(file = "./results/yeast_start_vol_2020_07_22_formatted.csv", header = FALSE, stringsAsFactors = FALSE)
+
+yeast_well_vol_corr <- sens_data_form(yeast_well_vol)
+
+y_label <- "OD"
+
+meanOD_all_treatments_untransformed <- untransformed_growth_curves(treatments, yeast_well_vol_corr)
+
+treatments_on_one_graph <- one_graph_combined(meanOD_all_treatments_untransformed, y_label)
+
+treatments_on_one_graph
+```
+
+And here are the results once log transformed:
+
+```{r}
+meanOD_all_treatments_nodivt0 <- nodivt0_growth_curves(treatments, yeast_well_vol_corr)
+
+y_label <- "ln(OD)"
+
+treatments_on_one_graph <- one_graph_combined(meanOD_all_treatments_nodivt0, y_label)
+
+treatments_on_one_graph
+```
+
+And then divided by t~0~:
+
+```{r}
+y_label <- "ln(OD[t]/OD[0])"
+
+meanOD_all_treatments_divt0 <- divt0_growth_curves(treatments, yeast_well_vol_corr)
+
+treatments_on_one_graph <- one_graph_combined(meanOD_all_treatments_divt0, y_label)
+
+treatments_on_one_graph
+```
+
+For some reason, decreasing the starting yeast cell concentration also decreased the maximum yeast cell concentration. This was unexpected. All dilutions should reach the same maximum yeast cell concentration, which suggests that some of the machine settings were affecting yeast growth. I repeated the dilution experiment with 60s shaking before cycles. This resolved the issue: 
+
+```{zsh, include = FALSE}
+#!/usr/bin/env zsh
+
+source ./WHATIDID_func.sh
+
+format_growth_assay_data yeast_starting_vol_2020_07_31 yeast_start_vol_2020_07_31
+ 
+```
+
+```{r}
+treatments <- c("1-", "5-", "10-", "20-", "50-", "100-")
+
+yeast_well_vol <- read.csv(file = "./results/yeast_start_vol_2020_07_31_formatted.csv", header = FALSE, stringsAsFactors = FALSE)
+
+yeast_well_vol_corr <- sens_data_form(yeast_well_vol)
+
+y_label <- "OD"
+
+meanOD_all_treatments_untransformed <- untransformed_growth_curves(treatments, yeast_well_vol_corr)
+
+treatments_on_one_graph <- one_graph_combined(meanOD_all_treatments_untransformed, y_label)
+
+treatments_on_one_graph
+```
+
+To try and create optimal growth conditions I altered the settings so the maximum amount of shaking was performed (272s every 300s). This was for 60 wells, which will be the number of wells used when pesticides start to be tested. 
+
+```{zsh, include = FALSE}
+#!/usr/bin/env zsh
+
+source ./WHATIDID_func.sh
+
+format_growth_assay_data yeast_starting_vol_2020_08_07 yeast_start_vol_2020_08_07
+ 
+```
+```{r}
+treatments <- c("1-", "5-", "10-", "20-", "50-", "100-")
+
+yeast_well_vol <- read.csv(file = "./results/yeast_start_vol_2020_08_07_formatted.csv", header = FALSE, stringsAsFactors = FALSE)
+
+yeast_well_vol_corr <- sens_data_form(yeast_well_vol)
+
+y_label <- "OD"
+
+meanOD_all_treatments_untransformed <- untransformed_growth_curves(treatments, yeast_well_vol_corr)
+
+treatments_on_one_graph <- one_graph_combined(meanOD_all_treatments_untransformed, y_label)
+
+treatments_on_one_graph
+```
+
+Here are the ln(OD) results:
+
+```{r}
+meanOD_all_treatments_nodivt0 <- nodivt0_growth_curves(treatments, yeast_well_vol_corr)
+
+y_label <- "ln(OD)"
+
+treatments_on_one_graph <- one_graph_combined(meanOD_all_treatments_nodivt0, y_label)
+
+treatments_on_one_graph
+```
+```{r}
+y_label <- "ln(OD[t]/OD[0])"
+
+meanOD_all_treatments_divt0 <- divt0_growth_curves(treatments, yeast_well_vol_corr)
+
+treatments_on_one_graph <- one_graph_combined(meanOD_all_treatments_divt0, y_label)
+
+treatments_on_one_graph
+```
+
+I think attaching the parafilm cover interferes with the OD measurements. Blank readings don't stabilise until around the 1 hour mark. This creates negative readings at the beginning of the run that produce NaN when ln(). Also, dividing by t~0~ no longer has the desired effect as t~0~ has been inflated, causing negative readings once ln(). Try without parafilm cover as evaporation shouldn't be a problem over 16h. If geom_smooth is used instead of geom_line it hides a multitude of sins. 
+
+If I don't correct for the blanks it remove the NaNs:
+
+```{zsh, include = FALSE}
+#!/usr/bin/env zsh
+
+source ./WHATIDID_func.sh
+
+format_growth_assay_data yeast_starting_vol_no_blanks_2020_08_07 yeast_start_vol_no_blanks2020_08_07
+ 
+```
+```{r}
+yeast_well_vol <- read.csv(file = "./results/yeast_start_vol_no_blanks2020_08_07_formatted.csv", header = FALSE, stringsAsFactors = FALSE)
+
+yeast_well_vol_corr <- sens_data_form(yeast_well_vol)
+
+meanOD_all_treatments_untransformed <- untransformed_growth_curves(treatments, yeast_well_vol_corr)
+
+meanOD_all_treatments_nodivt0 <- nodivt0_growth_curves(treatments, yeast_well_vol_corr)
+
+y_label <- "OD"
+
+treatments_on_one_graph <- one_graph_combined(meanOD_all_treatments_untransformed, y_label)
+
+treatments_on_one_graph
+
+y_label <- "ln(OD)"
+
+treatments_on_one_graph <- one_graph_combined(meanOD_all_treatments_nodivt0, y_label)
+
+treatments_on_one_graph
+```
+```{r}
+maximum_growth_rate_table <- maximum_growth_rate(treatments, yeast_well_vol_corr)
+
+kable(maximum_growth_rate_table, caption = "Maximum Gradients of Yeast Starting Dilutions and Associated Timepoint Windows")
+```
+
+Remove parafilm cover or keep on and don't correct for blanks? This would prevent spill from one well to another. 
+
+
