@@ -361,7 +361,7 @@ maximum_growth_rate <- function(treatments, sens_data_corr) {
     
     treatment_max_slope <- treatment_max_df [3, 1]
     
-    treatment_expo_phase_timepoints <- which(treatment_gradients$slope >= (0.95*treatment_max_slope))
+    treatment_expo_phase_timepoints <- which(treatment_gradients$slope >= (0.70*treatment_max_slope))
     
     # mistake here. Not populating dataframe cell with more than one value
     
@@ -545,6 +545,41 @@ maximum_growth_rate_table <- maximum_growth_rate(treatments, yeast_well_vol_corr
 kable(maximum_growth_rate_table, caption = "Maximum Gradients of Yeast Starting Dilutions and Associated Timepoint Windows")
 ```
 
-Remove parafilm cover or keep on and don't correct for blanks? This would prevent spill from one well to another. 
+Remove parafilm cover or keep on and don't correct for blanks? This would prevent spill from one well to another. The parafilm cover has to remain on to avoid contamination and evaporation. To combat evaporation I doubled the total volume in the well to 200$\mu$. This smoothed the curves too.  
 
+```{zsh, include = FALSE}
+#!/usr/bin/env zsh
 
+source ./WHATIDID_func.sh
+
+format_growth_assay_data dmso_methanol_sens_raw_2020_08_14 dmso_meth_2020_08_14
+ 
+```
+```{r}
+treatments <- c("control", "dmso", "methanol", "mixture")
+
+yeast_well_vol <- read.csv(file = "./results/dmso_meth_2020_08_14_formatted.csv", header = FALSE, stringsAsFactors = FALSE)
+
+yeast_well_vol_corr <- sens_data_form(yeast_well_vol)
+
+meanOD_all_treatments_untransformed <- untransformed_growth_curves(treatments, yeast_well_vol_corr)
+
+meanOD_all_treatments_nodivt0 <- nodivt0_growth_curves(treatments, yeast_well_vol_corr)
+
+y_label <- "OD"
+
+treatments_on_one_graph <- one_graph_combined(meanOD_all_treatments_untransformed, y_label)
+
+treatments_on_one_graph
+
+y_label <- "ln(OD)"
+
+treatments_on_one_graph <- one_graph_combined(meanOD_all_treatments_nodivt0, y_label)
+
+treatments_on_one_graph
+```
+```{r}
+maximum_growth_rate_table <- maximum_growth_rate(treatments, yeast_well_vol_corr)
+
+kable(maximum_growth_rate_table, caption = "Maximum Gradients of Yeast Starting Dilutions and Associated Timepoint Windows")
+```
