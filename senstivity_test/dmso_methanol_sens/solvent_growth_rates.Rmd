@@ -287,7 +287,7 @@ treatments_on_one_graph
 
 Although the starting yeast stock volume should have been the same for all treatments, dividing by OD~0~ showed this clearly wasn't the case. The smaller volume that was pipetted into DMSO resulted in a higher final ln(OD~t~/OD~0~).
 
-Each treatment began with yeast cells in the log phase (0.4-0.6OD). Cells were then diluted to a final OD of 0.05 in the microplate well. On visual inspection there doesn't seem to be much difference between the growth rates of the treatments. To quantify growth rates, either the maximum growth rate can be calculated, or the growth rate across a broader time interval. The second option accounts for random fluctuations in growth rate. I chose the second option. To determine the time interval used to measure the growth rate, ln(OD~t~/OD~0~) vs time was plotted for 5 time point intervals. For example, t = 0,5,10,15,20. The slope (growth rate) was calculated and saved. The same was done for all 5 time point intervals and time points associated with slopes that were ≥95% of the maximum slope were used to calculate the final growth rate. 
+Each treatment began with yeast cells in the log phase (0.4-0.6OD). Cells were then diluted to a final OD of 0.05 in the microplate well. On visual inspection there doesn't seem to be much difference between the growth rates of the treatments. To quantify growth rates, either the maximum growth rate can be calculated, or the growth rate across a broader time interval. The second option accounts for random fluctuations in growth rate. I chose the second option. To determine the time interval used to measure the growth rate, ln(OD~t~/OD~0~) vs time was plotted for 5 time point intervals. For example, t = 0,5,10,15,20. The slope (growth rate) was calculated and saved. The same was done for all 5 time point intervals and time points associated with slopes that were ≥90% of the maximum slope were used to calculate the final growth rate. 
 
 ```{r}
 treatments <- c("control", "dmso", "methanol", "mixture")
@@ -354,14 +354,14 @@ maximum_growth_rate <- function(treatments, sens_data_corr) {
     
     colMax <- function(data) sapply(data, max, na.rm = TRUE)
     
-    # find the maximum slope and return windows that are ≥ 95% of the maximum gradient
+    # find the maximum slope and return windows that are ≥ 90% of the maximum gradient
     treatment_max <- colMax(treatment_gradients)
     
     treatment_max_df <- data.frame(treatment_max)
     
     treatment_max_slope <- treatment_max_df [3, 1]
     
-    treatment_expo_phase_timepoints <- which(treatment_gradients$slope >= (0.70*treatment_max_slope))
+    treatment_expo_phase_timepoints <- which(treatment_gradients$slope >= (0.90*treatment_max_slope))
     
     # mistake here. Not populating dataframe cell with more than one value
     
@@ -373,7 +373,7 @@ maximum_growth_rate <- function(treatments, sens_data_corr) {
     max_slopes_table [i , 3] <- list(list(treatment_expo_phase_timepoints))
     
   }
-  colnames(max_slopes_table) <- c("Maximum Gradient", "Treatment", "Timepoint Windows ≥95% of Maximum Gradient")
+  colnames(max_slopes_table) <- c("Maximum Gradient", "Treatment", "Timepoint Windows ≥90% of Maximum Gradient")
   
   max_slopes_table
 }
@@ -545,7 +545,7 @@ maximum_growth_rate_table <- maximum_growth_rate(treatments, yeast_well_vol_corr
 kable(maximum_growth_rate_table, caption = "Maximum Gradients of Yeast Starting Dilutions and Associated Timepoint Windows")
 ```
 
-Remove parafilm cover or keep on and don't correct for blanks? This would prevent spill from one well to another. The parafilm cover has to remain on to avoid contamination and evaporation. To combat evaporation I doubled the total volume in the well to 200$\mu$. This smoothed the curves too.  
+Remove parafilm cover or keep on and don't correct for blanks? This would prevent spill from one well to another. The parafilm cover has to remain on to avoid contamination and evaporation. To combat evaporation I doubled the total volume in the well to 200$\mu$l. This smoothed the curves too. I also started with a theoretical starting OD of 0.01 not 0.05 this time. 
 
 ```{zsh, include = FALSE}
 #!/usr/bin/env zsh
@@ -558,13 +558,13 @@ format_growth_assay_data dmso_methanol_sens_raw_2020_08_14 dmso_meth_2020_08_14
 ```{r}
 treatments <- c("control", "dmso", "methanol", "mixture")
 
-yeast_well_vol <- read.csv(file = "./results/dmso_meth_2020_08_14_formatted.csv", header = FALSE, stringsAsFactors = FALSE)
+dmso_meth_sens <- read.csv(file = "./results/dmso_meth_2020_08_14_formatted.csv", header = FALSE, stringsAsFactors = FALSE)
 
-yeast_well_vol_corr <- sens_data_form(yeast_well_vol)
+dmso_meth_sens_corr <- sens_data_form(dmso_meth_sens)
 
-meanOD_all_treatments_untransformed <- untransformed_growth_curves(treatments, yeast_well_vol_corr)
+meanOD_all_treatments_untransformed <- untransformed_growth_curves(treatments, dmso_meth_sens_corr)
 
-meanOD_all_treatments_nodivt0 <- nodivt0_growth_curves(treatments, yeast_well_vol_corr)
+meanOD_all_treatments_nodivt0 <- nodivt0_growth_curves(treatments, dmso_meth_sens_corr)
 
 y_label <- "OD"
 
@@ -579,7 +579,219 @@ treatments_on_one_graph <- one_graph_combined(meanOD_all_treatments_nodivt0, y_l
 treatments_on_one_graph
 ```
 ```{r}
-maximum_growth_rate_table <- maximum_growth_rate(treatments, yeast_well_vol_corr)
+maximum_growth_rate_table <- maximum_growth_rate(treatments, dmso_meth_sens_corr)
 
-kable(maximum_growth_rate_table, caption = "Maximum Gradients of Yeast Starting Dilutions and Associated Timepoint Windows")
+kable(maximum_growth_rate_table, caption = "Maximum Gradients of Different Solvents and Associated Timepoint Windows")
 ```
+
+Here is each replicate plotted individually:
+
+```{r}
+individual_replicates_long <- function(replicates) {
+ 
+   time <- seq(0, 960, 5)
+  
+  replicates$time <- time
+  
+  replicates_long <- replicates %>% gather(condition, OD, -time)
+  
+  replicates_long 
+}
+
+individual_solvent_replicates <- individual_replicates_long(dmso_meth_sens_corr)
+
+y_label <- "OD"
+
+treatments_on_one_graph <- one_graph_combined(individual_solvent_replicates, y_label)
+
+treatments_on_one_graph
+```
+
+```{r}
+individual_replicates_long_log <- function(replicates) {
+ 
+  replicates_log <- log(replicates)
+  
+  time <- seq(0, 960, 5)
+  
+  replicates_log$time <- time
+  
+  replicates_log_long <- replicates_log %>% gather(condition, OD, -time)
+  
+  replicates_log_long 
+}
+
+individual_solvent_replicates_log <- individual_replicates_long_log(dmso_meth_sens_corr)
+
+y_label <- "ln(OD)"
+
+treatments_on_one_graph <- one_graph_combined(individual_solvent_replicates_log, y_label)
+
+treatments_on_one_graph
+```
+
+```{r}
+individual_replicates_long_log_divt0 <- function(replicates) {
+  
+
+replicates_from_1 <- data.frame(matrix(nrow = 193, ncol = ncol(replicates)))
+colnames(replicates_from_1) <- colnames(replicates)
+
+
+for (j in 1:length(replicates)) {
+  replicates_divide_t0 <- replicates [ , j] / replicates [1, j]
+  replicates_from_1[ , j] <- replicates_divide_t0
+} 
+
+replicates_log <- log(replicates_from_1)
+
+time <- seq(0, 960, 5)
+
+replicates_log$time <- time
+
+replicates_log_long <- replicates_log %>% gather(condition, OD, -time)
+
+replicates_log_long 
+}
+
+y_label <- "ln(OD[t]/OD[0])"
+
+replicates_divt0 <- individual_replicates_long_log_divt0(dmso_meth_sens_corr)
+
+treatments_on_one_graph <- one_graph_combined(replicates_divt0, y_label)
+
+treatments_on_one_graph
+```
+
+Does removing blank correction alter initial variation? Yes.
+
+```{zsh, include = FALSE}
+#!/usr/bin/env zsh
+
+source ./WHATIDID_func.sh
+
+format_growth_assay_data dmso_methanol_sens_raw_no_blanks_2020_08_14 dmso_meth_no_blanks_2020_08_14
+ 
+```
+```{r}
+treatments <- c("control", "dmso", "methanol", "mixture")
+
+dmso_meth_sens <- read.csv(file = "./results/dmso_meth_no_blanks_2020_08_14_formatted.csv", header = FALSE, stringsAsFactors = FALSE)
+
+dmso_meth_sens_corr <- sens_data_form(dmso_meth_sens)
+
+y_label <- "ln(OD[t]/OD[0])"
+
+replicates_divt0 <- individual_replicates_long_log_divt0(dmso_meth_sens_corr)
+
+treatments_on_one_graph <- one_graph_combined(replicates_divt0, y_label)
+
+treatments_on_one_graph
+```
+
+What are the timepoints associated with the exponential phase now?
+
+```{r}
+maximum_growth_rate_table <- maximum_growth_rate(treatments, dmso_meth_sens_corr)
+
+kable(maximum_growth_rate_table, caption = "Maximum Gradients of Different Solvents and Associated Timepoint Windows")
+```
+
+Colour all replicates of one treatment the same. If I try and use scale colour manual all lines must be set to different colours. If I create a new column with control, dmso, methanol and mixture and use this in ggplot2 it returns the unpleasant results below. Not sure how to get output to be individual lines coloured by treatment instead of shaded areas that go an odd colour when they overlap. 
+
+```{r}
+colour_by_treatment_group <- function(treatments, sens_data_corr) {
+
+long_with_cond_group <- tibble()
+
+for (i in 1:length(treatments)) {
+  
+  # extract only treatment x
+  treatment <- sens_data_corr %>% select(starts_with(treatments[i]))
+  # create time 
+  time <- seq(0, 960, 5)
+  # add time to first column 
+  treatment$time <- time
+  # convert from wide to long data format
+  treatment_long <- treatment %>% gather(condition, OD, -time)
+  # add condition_group column
+  treatment_long$condition_group <- treatments[i]
+  # append loop output
+  long_with_cond_group <- rbind(long_with_cond_group, treatment_long)
+}
+long_with_cond_group
+}
+
+long_replicates_grouped <- colour_by_treatment_group(treatments, dmso_meth_sens_corr)
+
+one_graph_combined_replicates <- function(time_cond_OD, y_label) {
+  
+one_graph <- ggplot(data = time_cond_OD, aes(x=time, y=OD)) + 
+  geom_line(aes(colour=condition_group), alpha=1) +
+  ggtitle("") +
+  xlab(expression(Time)) +
+  ylab(y_label) +
+  theme(panel.background = element_rect(fill = "white"), plot.margin = margin(1, 1, 1, 1, "cm"),
+  axis.line = element_line(), plot.background = element_rect(
+    fill = "grey90",
+    colour = "black",
+    size = 1
+  )
+  )
+
+one_graph
+
+}
+
+y_label <- "OD"
+  
+treatments_on_one_graph <- one_graph_combined_replicates(long_replicates_grouped, y_label)
+
+treatments_on_one_graph
+```
+
+```{r}
+individual_replicates_long_log_divt0_by_group <- function(treatments, replicates) {
+  
+  long_with_cond_group <- tibble()
+  
+  replicates_from_1 <- data.frame(matrix(nrow = 193, ncol = ncol(replicates)))
+  colnames(replicates_from_1) <- colnames(replicates)
+  
+  
+  for (j in 1:length(replicates)) {
+    replicates_divide_t0 <- replicates [ , j] / replicates [1, j]
+    replicates_from_1[ , j] <- replicates_divide_t0
+  } 
+  
+  replicates_log <- log(replicates_from_1)
+  
+  for (i in 1:length(treatments)) {
+    
+    # extract only treatment x
+    treatment <- replicates_log %>% select(starts_with(treatments[i]))
+    # create time 
+    time <- seq(0, 960, 5)
+    # add time to first column 
+    treatment$time <- time
+    # convert from wide to long data format
+    treatment_long <- treatment %>% gather(condition, OD, -time)
+    # add condition_group column
+    treatment_long$condition_group <- treatments[i]
+    # append loop output
+    long_with_cond_group <- rbind(long_with_cond_group, treatment_long)
+  }
+  
+  long_with_cond_group
+}
+
+long_replicates_grouped_logged <- individual_replicates_long_log_divt0_by_group(treatments, dmso_meth_sens_corr)
+
+y_label <- "ln(OD[t]/OD[0])"
+  
+treatments_on_one_graph <- one_graph_combined_replicates(long_replicates_grouped_logged, y_label)
+
+treatments_on_one_graph
+```
+
+This doesn't bother me too much as replicates won't be shown individually in results. Was going to remove between t~0~ and t~100~ but removing blank correction appears to have resolved initial fluctuation. Finally the machine settings and experimental design are producing the expected results. I want to see if there is a significant difference between the control, mean, dmso and mixture. The null hypothesis is there is no difference between them. To do this I have to perform a one way ANOVA. Before this I have to define the exponential phase and perform a linear regression to return a growth rate for each replicate. When defining the timepoints that contribute to the exponential phase there needs to be a mechanism in place that only takes an unbroken sequence of values that are ≤5 away from their neighbours. For example, 23, 24, 42, 43, 44, 45, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 76 would return 42:76. 
