@@ -791,4 +791,70 @@ treatments_on_one_graph <- one_graph_combined_replicates(long_replicates_grouped
 treatments_on_one_graph
 ```
 
-This doesn't bother me too much as replicates won't be shown individually in results. Was going to remove between t~0~ and t~100~ but removing blank correction appears to have resolved initial fluctuation. Finally the machine settings and experimental design are producing the expected results. I want to see if there is a significant difference between the control, mean, dmso and mixture. The null hypothesis is there is no difference between them. To do this I have to perform a one way ANOVA. Before this I have to define the exponential phase and perform a linear regression to return a growth rate for each replicate. When defining the timepoints that contribute to the exponential phase there needs to be a mechanism in place that only takes an unbroken sequence of values that are ≤5 away from their neighbours. For example, 23, 24, 42, 43, 44, 45, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 76 would return 42:76. 
+This doesn't bother me too much as replicates won't be shown individually in results. Was going to remove between t~0~ and t~100~ but removing blank correction appears to have resolved initial fluctuation. Finally the machine settings and experimental design are producing the expected results. I want to see if there is a significant difference between the control, mean, dmso and mixture. The null hypothesis is there is no difference between them. To do this I have to perform a one way ANOVA. Before this I have to define the exponential phase and perform a linear regression to return a growth rate for each replicate. When defining the timepoints that contribute to the exponential phase there needs to be a mechanism in place that only takes the longest unbroken sequence of values that are ≤5 away from their neighbours. For example, 23, 24, 42, 43, 44, 45, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 76 would return 42:76. The first step is to write a function that outputs the max growth rate and timepoint windows associated with ≤80% max growth rate for each replicate. Not sure what to make the cut off point. 
+
+```{r}
+maximum_growth_rate_individual_replicates <- function(treatments, sens_data_corr) {
+  
+  max_slopes_table <- tibble()
+  
+    # create time 
+    time <- seq(0, 960, 5)
+    # log transform everything
+    log_treatment <- log(sens_data_corr)
+   
+    for (i in 1:length(log_treatment)) {
+    time_mean_treatment <- data.frame(time = time, OD = log_treatment[, i])  
+
+    # calcularing gradient of 5 time point windows along linearised treatment growth curve. 
+    VAR <- seq(1, 189, 1)
+    treatment_tframeslope <- data.frame(matrix(nrow = 189, ncol = 1))
+    
+    for (k in 1:length(VAR)) {
+      treatment_window <- time_mean_treatment [((VAR[k]):(VAR[k]+4)), ]
+      treatment_lm <- lm(formula = OD ~ time, data = treatment_window)
+      treatment_slope <- treatment_lm$coefficients[2]
+      treatment_tframeslope[VAR[k] , ] <- treatment_slope
+    }
+    
+    start <- seq (0, 940, 5)
+    
+    end <- seq (20, 960, 5)
+    
+    treatment_gradients <- data.frame(start_time=start, end_time=end, slope=treatment_tframeslope)
+    
+    colnames(treatment_gradients) <- c("start_time", "end_time", "slope")
+    
+    colMax <- function(data) sapply(data, max, na.rm = TRUE)
+    
+    # find the maximum slope and return windows that are ≥ 90% of the maximum gradient
+    treatment_max <- colMax(treatment_gradients)
+    
+    treatment_max_df <- data.frame(treatment_max)
+    
+    treatment_max_slope <- treatment_max_df [3, 1]
+    
+    treatment_expo_phase_timepoints <- which(treatment_gradients$slope >= (0.80*treatment_max_slope))
+    
+    max_slopes_table [i , 1] <- treatment_max_slope
+    
+    max_slopes_table [i , 2] <- treatments[i]
+    
+    max_slopes_table [i , 3] <- list(list(treatment_expo_phase_timepoints))
+    
+  }
+  colnames(max_slopes_table) <- c("Maximum Gradient", "Treatment", "Timepoint Windows ≥80% of Maximum Gradient")
+  
+  max_slopes_table
+}
+
+treatments <- colnames(dmso_meth_sens_corr)
+
+maximum_growth_rate_table <- maximum_growth_rate_individual_replicates(treatments, dmso_meth_sens_corr)
+
+kable(maximum_growth_rate_table, caption = "Maximum Gradients of DMSO, Methanol and DMSO+Methanol Treated Yeast Cells and Associated Timepoint Windows")
+
+```
+
+Second, extract the longest sequence of timepoint windows with ≥80% growth rate maximum that are separated by ≤5 from neighbours. 
+

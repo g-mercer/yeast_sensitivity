@@ -43,21 +43,21 @@ sens_data_corr <- sens_data_form(dmso_meth_sens)
 
 treatments <- colnames(sens_data_corr)
 
-maximum_growth_rate <- function(treatments, sens_data_corr) {
+maximum_growth_rate_individual_replicates <- function(treatments, sens_data_corr) {
   
   max_slopes_table <- tibble()
   
     # create time 
     time <- seq(0, 960, 5)
     # log transform everything
-    log_treatment <<- log(sens_data_corr)
+    log_treatment <- log(sens_data_corr)
    
     for (i in 1:length(log_treatment)) {
-    time_mean_treatment <<- data.frame(time = time, OD = log_treatment[, i])  
+    time_mean_treatment <- data.frame(time = time, OD = log_treatment[, i])  
 
     # calcularing gradient of 5 time point windows along linearised treatment growth curve. 
     VAR <- seq(1, 189, 1)
-    treatment_tframeslope <<- data.frame(matrix(nrow = 189, ncol = 1))
+    treatment_tframeslope <- data.frame(matrix(nrow = 189, ncol = 1))
     
     for (k in 1:length(VAR)) {
       treatment_window <- time_mean_treatment [((VAR[k]):(VAR[k]+4)), ]
@@ -76,14 +76,14 @@ maximum_growth_rate <- function(treatments, sens_data_corr) {
     
     colMax <- function(data) sapply(data, max, na.rm = TRUE)
     
-    # find the maximum slope and return windows that are ≥ 90% of the maximum gradient
+    # find the maximum slope and return windows that are ≥ 80% of the maximum gradient
     treatment_max <- colMax(treatment_gradients)
     
     treatment_max_df <- data.frame(treatment_max)
     
     treatment_max_slope <- treatment_max_df [3, 1]
     
-    treatment_expo_phase_timepoints <- which(treatment_gradients$slope >= (0.90*treatment_max_slope))
+    treatment_expo_phase_timepoints <- which(treatment_gradients$slope >= (0.80*treatment_max_slope))
     
     max_slopes_table [i , 1] <- treatment_max_slope
     
@@ -92,11 +92,47 @@ maximum_growth_rate <- function(treatments, sens_data_corr) {
     max_slopes_table [i , 3] <- list(list(treatment_expo_phase_timepoints))
     
   }
-  colnames(max_slopes_table) <- c("Maximum Gradient", "Treatment", "Timepoint Windows ≥90% of Maximum Gradient")
+  colnames(max_slopes_table) <- c("Maximum Gradient", "Treatment", "Timepoint Windows ≥80% of Maximum Gradient")
   
   max_slopes_table
 }
-maximum_growth_rate_table <- maximum_growth_rate(treatments, sens_data_corr)
+maximum_growth_rate_table <- maximum_growth_rate_individual_replicates(treatments, sens_data_corr)
 
 kable(maximum_growth_rate_table, caption = "Maximum Gradients of DMSO, Methanol and DMSO+Methanol Treated Yeast Cells and Associated Timepoint Windows")
+
+
+
+exponential_phase <- function(maximum_growth_rate_table, treatments, sens_data_corr) {
+  
+  sens_data_corr_log <- log(sens_data_corr)
+  time <- seq(0, 950, 5)
+  expo_phase_slope_ouput <- data.frame(matrix(nrow = length(treatments), ncol = 2))
+  
+  for (i in 1:length(treatments)) {
+  time_windows <- maximum_growth_rate_table [i , 3]
+  time_windows_vector <- unlist(time_windows, use.names=FALSE)
+  
+  # splits the vector where the gap between values is >5. 
+  expo_phase <- split(time_windows_vector, cumsum(c(1, diff(time_windows_vector) > 5 )))
+  
+  # returns the longest generated list. Remember that this list contains timepoint windows.
+  expo_phase_longest <- expo_phase [which.max(lengths(expo_phase))]
+  expo_phase_longest_vector <- unlist(expo_phase_longest, use.names=FALSE)
+  
+  # extract from sens_data_corr_log the expo_phase for each replicate. Add 4 because indexing corresponds to beginning of timepoint window not end. 
+  expo_phase_points <- sens_data_corr_log [expo_phase_longest_vector[which.min(expo_phase_longest_vector)]:(expo_phase_longest_vector[which.max(expo_phase_longest_vector)]+4), i]
+  
+  expo_phase_points_df <- as.data.frame(expo_phase_points)
+  expo_phase_points_df$time <- time [expo_phase_longest_vector[which.min(expo_phase_longest_vector)]:(expo_phase_longest_vector[which.max(expo_phase_longest_vector)]+4)]
+  
+  expo_phase_lm <- lm(formula = expo_phase_points ~ time, data = expo_phase_points_df)
+  expo_phase_slope <- expo_phase_lm$coefficients[2]
+  
+  expo_phase_slope_ouput [i , 2] <- expo_phase_slope
+  expo_phase_slope_ouput [i , 1] <- treatments [i]
+  }
+  expo_phase_slope_ouput
+} 
+
+exponential_phase(maximum_growth_rate_table, treatments, sens_data_corr)
 
