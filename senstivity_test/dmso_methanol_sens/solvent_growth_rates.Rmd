@@ -362,10 +362,7 @@ maximum_growth_rate <- function(treatments, sens_data_corr) {
     treatment_max_slope <- treatment_max_df [3, 1]
     
     treatment_expo_phase_timepoints <- which(treatment_gradients$slope >= (0.90*treatment_max_slope))
-    
-    # mistake here. Not populating dataframe cell with more than one value
-    
-    
+
     max_slopes_table [i , 1] <- treatment_max_slope
     
     max_slopes_table [i , 2] <- treatments[i]

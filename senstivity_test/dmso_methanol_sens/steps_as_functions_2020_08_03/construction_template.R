@@ -37,11 +37,66 @@ sens_data_form <- function(sens_data) {
   sens_data_corr <- sens_data_nb %>% select(-(starts_with("blank")))
 }
 
-treatments <- c("control", "dmso", "methanol", "mixture")
-
 dmso_meth_sens <- read.csv(file = "./results/dmso_meth_no_blanks_2020_08_14_formatted.csv", header = FALSE, stringsAsFactors = FALSE)
 
 sens_data_corr <- sens_data_form(dmso_meth_sens)
 
-treatments <- c("control", "dmso", "methanol", "mixture")
+treatments <- colnames(sens_data_corr)
+
+maximum_growth_rate <- function(treatments, sens_data_corr) {
+  
+  max_slopes_table <- tibble()
+  
+    # create time 
+    time <- seq(0, 960, 5)
+    # log transform everything
+    log_treatment <<- log(sens_data_corr)
+   
+    for (i in 1:length(log_treatment)) {
+    time_mean_treatment <<- data.frame(time = time, OD = log_treatment[, i])  
+
+    # calcularing gradient of 5 time point windows along linearised treatment growth curve. 
+    VAR <- seq(1, 189, 1)
+    treatment_tframeslope <<- data.frame(matrix(nrow = 189, ncol = 1))
+    
+    for (k in 1:length(VAR)) {
+      treatment_window <- time_mean_treatment [((VAR[k]):(VAR[k]+4)), ]
+      treatment_lm <- lm(formula = OD ~ time, data = treatment_window)
+      treatment_slope <- treatment_lm$coefficients[2]
+      treatment_tframeslope[VAR[k] , ] <- treatment_slope
+    }
+    
+    start <- seq (0, 940, 5)
+    
+    end <- seq (20, 960, 5)
+    
+    treatment_gradients <- data.frame(start_time=start, end_time=end, slope=treatment_tframeslope)
+    
+    colnames(treatment_gradients) <- c("start_time", "end_time", "slope")
+    
+    colMax <- function(data) sapply(data, max, na.rm = TRUE)
+    
+    # find the maximum slope and return windows that are ≥ 90% of the maximum gradient
+    treatment_max <- colMax(treatment_gradients)
+    
+    treatment_max_df <- data.frame(treatment_max)
+    
+    treatment_max_slope <- treatment_max_df [3, 1]
+    
+    treatment_expo_phase_timepoints <- which(treatment_gradients$slope >= (0.90*treatment_max_slope))
+    
+    max_slopes_table [i , 1] <- treatment_max_slope
+    
+    max_slopes_table [i , 2] <- treatments[i]
+    
+    max_slopes_table [i , 3] <- list(list(treatment_expo_phase_timepoints))
+    
+  }
+  colnames(max_slopes_table) <- c("Maximum Gradient", "Treatment", "Timepoint Windows ≥90% of Maximum Gradient")
+  
+  max_slopes_table
+}
+maximum_growth_rate_table <- maximum_growth_rate(treatments, sens_data_corr)
+
+kable(maximum_growth_rate_table, caption = "Maximum Gradients of DMSO, Methanol and DMSO+Methanol Treated Yeast Cells and Associated Timepoint Windows")
 
