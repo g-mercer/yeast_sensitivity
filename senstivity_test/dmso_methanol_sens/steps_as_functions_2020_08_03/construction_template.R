@@ -1,6 +1,8 @@
 library(tidyverse)
 library(plyr)
 library(knitr)
+library(ggpubr)
+library(rstatix)
 
 sens_data_form <- function(sens_data) {
   # transpose
@@ -134,5 +136,198 @@ exponential_phase <- function(maximum_growth_rate_table, treatments, sens_data_c
   expo_phase_slope_ouput
 } 
 
-exponential_phase(maximum_growth_rate_table, treatments, sens_data_corr)
+exponential_phase_slopes <- exponential_phase(maximum_growth_rate_table, treatments, sens_data_corr)
+
+# give replicates the same name according to their treatment
+exponential_phase_slopes_group_names <- str_replace_all(exponential_phase_slopes [ , 1], "\\d", "")
+exponential_phase_slopes [ , 1] <- exponential_phase_slopes_group_names
+
+colnames(exponential_phase_slopes) <- c("group", "growth_rate")
+
+# begin the statistical analysis
+exponential_phase_slopes <- exponential_phase_slopes %>%
+  reorder_levels(group, order = c("control", "dmso", "methanol", "mixture"))
+
+exponential_phase_slopes %>% group_by(group) %>% get_summary_stats(growth_rate, type = "mean_sd")
+
+# visualisation
+ggboxplot(exponential_phase_slopes, x = "group", y = "growth_rate")
+
+# check ANOVA assumptions - 1) outliers
+exponential_phase_slopes %>% group_by(group) %>% identify_outliers(growth_rate)
+
+# there was an extreme outlier. Can include the outlier in the analysis anyway if you do not 
+# believe the result will be substantially affected. This can be evaluated by comparing the 
+# result of the ANOVA test with and without the outlier. It’s also possible to keep the outliers 
+# in the data and perform a robust ANOVA test using the WRS2 package.
+
+# 2) normality - Analyzing the ANOVA model residuals to check the normality for all groups together. 
+# This approach is easier and it’s very handy when you have many groups or if there are few data
+# points per group.
+
+# NOTE - Note that, normality test is sensitive to sample size. Small samples most often pass normality tests.
+# Therefore, it’s important to combine visual inspection and significance test in order to take the right decision.
+# This is why I chose to model residuals not each group individually. 
+
+# build the linear model
+model  <- lm(growth_rate ~ group, data = exponential_phase_slopes)
+
+# Create a QQ plot of residuals. Correlation between given data and normal distribution.
+ggqqplot(residuals(model))
+
+# Density plot: the density plot provides a visual judgment about whether the distribution is bell shaped.
+library("ggpubr")
+ggdensity(exponential_phase_slopes$growth_rate, 
+          main = "Density plot of growth_rate",
+          xlab = "growth_rate")
+
+# Shapiro-Wilk test of normality
+shapiro_test(residuals(model))
+
+# from these three tests I conclude that the probability distribution of the data is 
+# not significantly different from a normal distribution. 
+
+# if I check the normality assumption by group DMSO isn't normally distributed. Feel like my data is borderline
+# going to carry out ANOVA and Kruskal-Wallis test to see if they yield different results. 
+exponential_phase_slopes %>% group_by(group) %>% shapiro_test(growth_rate)
+
+# 3) homogeneity of variance assumption
+
+# a "residuals versus fits plot" tests homogeneity of variance
+plot(model, 1)
+
+# the three tests below also do this. For all the null hypothesis is that variance is homogeneous (Homoscedasticity)
+# Levene and fligner are robust against departures from normality. 
+exponential_phase_slopes %>% levene_test(growth_rate ~ group)
+
+fligner.test(growth_rate ~ group, data = exponential_phase_slopes)
+
+bartlett.test(growth_rate ~ group, data = exponential_phase_slopes)
+
+# there there is no significant difference between variance across groups. Therefore, we can assume homogeneity of variance in the different treatment groups.
+
+# ANOVA. Groups are significantly different
+res.aov <- exponential_phase_slopes %>% anova_test(growth_rate ~ group)
+res.aov
+
+# Tukey post-hoc tests to perform multiple pairwise comparisons between groups. 
+pwc <- exponential_phase_slopes %>% tukey_hsd(growth_rate ~ group)
+pwc
+
+# Visualization: box plots with p-values
+pwc <- pwc %>% add_xy_position(x = "group")
+ggboxplot(exponential_phase_slopes, x = "group", y = "growth_rate") +
+  stat_pvalue_manual(pwc, hide.ns = TRUE) +
+  labs(
+    subtitle = get_test_label(res.aov, detailed = TRUE),
+    caption = get_pwc_label(pwc)
+  )
+
+# Tukey pairwise comparisons reveal a significant difference between control vs dmso and control vs mixture. 
+
+# Does 1) removing the extreme outlier and then performing an ANOVA and 2) removing the extreme outlier
+# and then performing a Kruskal-Wallis test affect the results?
+
+# groups with unequal sample size can affect the statistical power of ANOVA. Can affect the homogeneity of variance.
+# if the homogeneity of variance is affected perform a Welch.
+
+# 1) identifying extreme outliers and removing them.
+outlier_test <- exponential_phase_slopes %>% group_by(group) %>% identify_outliers(growth_rate)
+treatments <- outlier_test [ , 1]
+treatments <- as.matrix(treatments)
+treatments <- as.character(treatments)
+
+outliers <- c()
+for (i in 1:length(treatments)) {
+  
+  if (outlier_test[i, 4] == TRUE) {
+    outliers <- outlier_test[i, 2]
+  }
+}
+
+outliers <- as.matrix(outliers)
+
+for (i in 1:length(outliers)) {
+  outlier_rows <- which(exponential_phase_slopes$growth_rate == outliers[i])
+  exponential_phase_slopes <- exponential_phase_slopes [-c(outlier_rows), ]
+}
+
+# performing ANOVA on dataset without extreme outliers.
+# test assumptions
+# visualisation
+ggboxplot(exponential_phase_slopes, x = "group", y = "growth_rate")
+
+# 1) outliers - no extreme outliers
+exponential_phase_slopes %>% group_by(group) %>% identify_outliers(growth_rate)
+
+# 2) normality - no sig diff to normal distribution
+
+#build the linear model
+model  <- lm(growth_rate ~ group, data = exponential_phase_slopes)
+
+# Create a QQ plot of residuals. Correlation between given data and normal distribution.
+ggqqplot(residuals(model))
+
+# Density plot: the density plot provides a visual judgment about whether the distribution is bell shaped.
+library("ggpubr")
+ggdensity(exponential_phase_slopes$growth_rate, 
+          main = "Density plot of growth_rate",
+          xlab = "growth_rate")
+
+# Shapiro-Wilk test of normality
+shapiro_test(residuals(model))
+
+# 3) homogeneity of variance - Homoscedastic
+
+# a "residuals versus fits plot" tests homogeneity of variance
+plot(model, 1)
+
+# the three tests below also do this. For all the null hypothesis is that variance is homogeneous (Homoscedasticity)
+# Levene and fligner are robust against departures from normality. 
+exponential_phase_slopes %>% levene_test(growth_rate ~ group)
+
+fligner.test(growth_rate ~ group, data = exponential_phase_slopes)
+
+bartlett.test(growth_rate ~ group, data = exponential_phase_slopes)
+
+# ANOVA - significantly different 
+res.aov <- exponential_phase_slopes %>% anova_test(growth_rate ~ group)
+res.aov
+
+# Tukey post-hoc tests to perform multiple pairwise comparisons between groups. Same groups still different. 
+pwc <- exponential_phase_slopes %>% tukey_hsd(growth_rate ~ group)
+pwc
+
+# Visualization: box plots with p-values
+pwc <- pwc %>% add_xy_position(x = "group")
+ggboxplot(exponential_phase_slopes, x = "group", y = "growth_rate") +
+  stat_pvalue_manual(pwc, hide.ns = TRUE) +
+  labs(
+    subtitle = get_test_label(res.aov, detailed = TRUE),
+    caption = get_pwc_label(pwc)
+  )
+
+# Kruskal-Wallis test without extreme outlier
+res.kruskal <- exponential_phase_slopes %>% kruskal_test(growth_rate ~ group)
+res.kruskal
+
+# eta squared, based on the H-statistic, is a measure of the Kruskal-Wallis test effect size.
+# the percentage of variance in the dependent variable explained by the independent variable.
+exponential_phase_slopes %>% kruskal_effsize(growth_rate ~ group)
+
+# pairwise comparisons - again control vs dmso and control vs mixture are significantly different. 
+# Compared to the Wilcoxon’s test, the Dunn’s test takes into account the rankings used 
+# by the Kruskal-Wallis test. It also does ties adjustments.
+pwc <- exponential_phase_slopes %>% 
+  dunn_test(growth_rate ~ group, p.adjust.method = "bonferroni") 
+pwc
+
+# Visualization: box plots with p-values
+pwc <- pwc %>% add_xy_position(x = "group")
+ggboxplot(exponential_phase_slopes, x = "group", y = "growth_rate") +
+  stat_pvalue_manual(pwc, hide.ns = TRUE) +
+  labs(
+    subtitle = get_test_label(res.kruskal, detailed = TRUE),
+    caption = get_pwc_label(pwc)
+  )
 
