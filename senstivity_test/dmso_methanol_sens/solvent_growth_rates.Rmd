@@ -27,6 +27,8 @@ Growth curves were generated using a BMG Microplate Reader.Initially, the plate 
 
 * Shake Frequency - 200rpm
 
+* Total Well Volume - 100µl
+
 The plate reader outputs the data in a very odd format so the first thing to do is remove all the unnecessary information and convert time into minutes. I used zsh for this. 
 
 ```{zsh raw-file-formatting, echo = TRUE}
@@ -47,6 +49,8 @@ After this point I worked in R. I used the packages:
 library(tidyverse)
 library(plyr)
 library(knitr)
+library(ggpubr)
+library(rstatix)
 ``` 
 ```{r, include = TRUE}
 r_packages <- installed.packages()[names(sessionInfo()$otherPkgs), "Version"]
@@ -794,6 +798,13 @@ treatments_on_one_graph
 This doesn't bother me too much as replicates won't be shown individually in results. Was going to remove between t~0~ and t~100~ but removing blank correction appears to have resolved initial fluctuation. Finally the machine settings and experimental design are producing the expected results. I want to see if there is a significant difference between the control, mean, dmso and mixture. The null hypothesis is there is no difference between them. To do this I have to perform a one way ANOVA. Before this I have to define the exponential phase and perform a linear regression to return a growth rate for each replicate. When defining the timepoints that contribute to the exponential phase there needs to be a mechanism in place that only takes the longest unbroken sequence of values that are ≤5 away from their neighbours. For example, 23, 24, 42, 43, 44, 45, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 76 would return 42:76. The first step is to write a function that outputs the max growth rate and timepoint windows associated with ≤80% max growth rate for each replicate. Not sure what to make the cut off point. 
 
 ```{r}
+
+dmso_meth_sens <- read.csv(file = "./results/dmso_meth_no_blanks_2020_08_14_formatted.csv", header = FALSE, stringsAsFactors = FALSE)
+
+sens_data_corr <- sens_data_form(dmso_meth_sens)
+
+treatments <- colnames(sens_data_corr)
+
 maximum_growth_rate_individual_replicates <- function(treatments, sens_data_corr) {
   
   max_slopes_table <- tibble()
@@ -827,7 +838,7 @@ maximum_growth_rate_individual_replicates <- function(treatments, sens_data_corr
     
     colMax <- function(data) sapply(data, max, na.rm = TRUE)
     
-    # find the maximum slope and return windows that are ≥ 90% of the maximum gradient
+    # find the maximum slope and return windows that are ≥ 80% of the maximum gradient
     treatment_max <- colMax(treatment_gradients)
     
     treatment_max_df <- data.frame(treatment_max)
@@ -856,5 +867,257 @@ kable(maximum_growth_rate_table, caption = "Maximum Gradients of DMSO, Methanol 
 
 ```
 
-Second, extract the longest sequence of timepoint windows with ≥80% growth rate maximum that are separated by ≤5 from neighbours. 
+Second, extract the longest sequence of timepoint windows with ≥80% growth rate maximum that are separated by ≤5 from neighbours. Then perform linear regression on exponential phases to return final growth rates for each replicate. 
+
+```{r}
+exponential_phase <- function(maximum_growth_rate_table, treatments, sens_data_corr) {
+  
+  sens_data_corr_log <- log(sens_data_corr)
+  time <- seq(0, 950, 5)
+  expo_phase_slope_ouput <- data.frame(matrix(nrow = length(treatments), ncol = 2))
+  
+  for (i in 1:length(treatments)) {
+  time_windows <- maximum_growth_rate_table [i , 3]
+  time_windows_vector <- unlist(time_windows, use.names=FALSE)
+  
+  # splits the vector where the gap between values is >5. 
+  expo_phase <- split(time_windows_vector, cumsum(c(1, diff(time_windows_vector) > 5 )))
+  
+  # returns the longest generated list. Remember that this list contains timepoint windows.
+  expo_phase_longest <- expo_phase [which.max(lengths(expo_phase))]
+  expo_phase_longest_vector <- unlist(expo_phase_longest, use.names=FALSE)
+  
+  # extract from sens_data_corr_log the expo_phase for each replicate. Add 4 because indexing corresponds to beginning of timepoint window not end. 
+  expo_phase_points <- sens_data_corr_log [expo_phase_longest_vector[which.min(expo_phase_longest_vector)]:(expo_phase_longest_vector[which.max(expo_phase_longest_vector)]+4), i]
+  
+  expo_phase_points_df <- as.data.frame(expo_phase_points)
+  expo_phase_points_df$time <- time [expo_phase_longest_vector[which.min(expo_phase_longest_vector)]:(expo_phase_longest_vector[which.max(expo_phase_longest_vector)]+4)]
+  
+  expo_phase_lm <- lm(formula = expo_phase_points ~ time, data = expo_phase_points_df)
+  expo_phase_slope <- expo_phase_lm$coefficients[2]
+  
+  expo_phase_slope_ouput [i , 2] <- expo_phase_slope
+  expo_phase_slope_ouput [i , 1] <- treatments [i]
+  }
+  expo_phase_slope_ouput
+} 
+
+exponential_phase_slopes <- exponential_phase(maximum_growth_rate_table, treatments, sens_data_corr)
+
+# give replicates the same name according to their treatment
+exponential_phase_slopes_group_names <- str_replace_all(exponential_phase_slopes [ , 1], "\\d", "")
+exponential_phase_slopes [ , 1] <- exponential_phase_slopes_group_names
+
+colnames(exponential_phase_slopes) <- c("group", "growth_rate")
+
+kable(exponential_phase_slopes, caption = "Individual Replicates With Associated Exponential Phase Growth Rate (OD/min)")
+```
+
+Next the stats to determine if there is a significant difference between the controls and solvent concentrations
+
+```{r}
+# begin the statistical analysis
+exponential_phase_slopes <- exponential_phase_slopes %>%
+  reorder_levels(group, order = c("control", "dmso", "methanol", "mixture"))
+
+exponential_phase_slopes %>% group_by(group) %>% get_summary_stats(growth_rate, type = "mean_sd")
+
+# visualisation
+ggboxplot(exponential_phase_slopes, x = "group", y = "growth_rate")
+
+# check ANOVA assumptions - 1) outliers
+exponential_phase_slopes %>% group_by(group) %>% identify_outliers(growth_rate)
+```
+there was an extreme outlier. Can include the outlier in the analysis anyway if you do not 
+believe the result will be substantially affected. This can be evaluated by comparing the 
+result of the ANOVA test with and without the outlier. It’s also possible to keep the outliers 
+in the data and perform a robust ANOVA test using the WRS2 package.
+
+2) normality - Analyzing the ANOVA model residuals to check the normality for all groups together. 
+This approach is easier and it’s very handy when you have many groups or if there are few data
+points per group.
+
+NOTE - Note that, normality test is sensitive to sample size. Small samples most often pass normality tests.
+Therefore, it’s important to combine visual inspection and significance test in order to take the right decision.
+This is why I chose to model residuals not each group individually. 
+
+Create a QQ plot of residuals, density plot and Shapiro Wilks test
+
+```{r}
+# build the linear model
+model  <- lm(growth_rate ~ group, data = exponential_phase_slopes)
+
+# Create a QQ plot of residuals. Correlation between given data and normal distribution.
+ggqqplot(residuals(model))
+
+# Density plot: the density plot provides a visual judgment about whether the distribution is bell shaped.
+library("ggpubr")
+ggdensity(exponential_phase_slopes$growth_rate, 
+          main = "Density plot of growth_rate",
+          xlab = "growth_rate")
+
+# Shapiro-Wilk test of normality
+shapiro_test(residuals(model))
+```
+
+from these three tests I conclude that the probability distribution of the data is 
+not significantly different from a normal distribution. 
+
+if I check the normality assumption by group DMSO isn't normally distributed. Feel like my data is borderline
+going to carry out ANOVA and Kruskal-Wallis test to see if they yield different results. 
+
+```{r}
+exponential_phase_slopes %>% group_by(group) %>% shapiro_test(growth_rate)
+```
+
+3) homogeneity of variance assumption - a "residuals versus fits plot" tests homogeneity of variance. The three tests below also do this. For all the null hypothesis is that variance is homogeneous (Homoscedasticity). Levene and fligner are robust against departures from normality. 
+```{r}
+plot(model, 1)
+
+# the three tests below also do this. For all the null hypothesis is that variance is homogeneous (Homoscedasticity)
+# Levene and fligner are robust against departures from normality. 
+exponential_phase_slopes %>% levene_test(growth_rate ~ group)
+
+fligner.test(growth_rate ~ group, data = exponential_phase_slopes)
+
+bartlett.test(growth_rate ~ group, data = exponential_phase_slopes)
+```
+
+There is no significant difference between variance across groups. Therefore, we can assume homogeneity of variance in the different treatment groups. Perform ANOVA and post-hoc Tukey
+
+```{r}
+# ANOVA. Groups are significantly different
+res.aov <- exponential_phase_slopes %>% anova_test(growth_rate ~ group)
+res.aov
+
+# Tukey post-hoc tests to perform multiple pairwise comparisons between groups. 
+pwc <- exponential_phase_slopes %>% tukey_hsd(growth_rate ~ group)
+pwc
+
+# Visualization: box plots with p-values
+pwc <- pwc %>% add_xy_position(x = "group")
+ggboxplot(exponential_phase_slopes, x = "group", y = "growth_rate") +
+  stat_pvalue_manual(pwc, hide.ns = TRUE) +
+  labs(
+    subtitle = get_test_label(res.aov, detailed = TRUE),
+    caption = get_pwc_label(pwc)
+  )
+```
+
+Tukey pairwise comparisons reveal a significant difference between control vs dmso and control vs mixture. 
+
+Does 1) removing the extreme outlier and then performing an ANOVA and 2) removing the extreme outlier and then performing a Kruskal-Wallis test affect the results?
+
+Groups with unequal sample size can affect the statistical power of ANOVA. Can affect the homogeneity of variance. If the homogeneity of variance is affected perform a Welch.
+
+1) identifying extreme outliers and removing them.
+```{r}
+outlier_test <- exponential_phase_slopes %>% group_by(group) %>% identify_outliers(growth_rate)
+treatments <- outlier_test [ , 1]
+treatments <- as.matrix(treatments)
+treatments <- as.character(treatments)
+
+outliers <- c()
+for (i in 1:length(treatments)) {
+  
+  if (outlier_test[i, 4] == TRUE) {
+    outliers <- outlier_test[i, 2]
+  }
+}
+
+outliers <- as.matrix(outliers)
+
+for (i in 1:length(outliers)) {
+  outlier_rows <- which(exponential_phase_slopes$growth_rate == outliers[i])
+  exponential_phase_slopes <- exponential_phase_slopes [-c(outlier_rows), ]
+}
+```
+
+Performing ANOVA on dataset without extreme outliers. Test assumptions
+
+# visualisation
+ggboxplot(exponential_phase_slopes, x = "group", y = "growth_rate")
+```{r}
+# visualisation
+ggboxplot(exponential_phase_slopes, x = "group", y = "growth_rate")
+
+# 1) outliers - no extreme outliers
+exponential_phase_slopes %>% group_by(group) %>% identify_outliers(growth_rate)
+
+# 2) normality - no sig diff to normal distribution
+
+#build the linear model
+model  <- lm(growth_rate ~ group, data = exponential_phase_slopes)
+
+# Create a QQ plot of residuals. Correlation between given data and normal distribution.
+ggqqplot(residuals(model))
+
+# Density plot: the density plot provides a visual judgment about whether the distribution is bell shaped.
+library("ggpubr")
+ggdensity(exponential_phase_slopes$growth_rate, 
+          main = "Density plot of growth_rate",
+          xlab = "growth_rate")
+
+# Shapiro-Wilk test of normality
+shapiro_test(residuals(model))
+
+# 3) homogeneity of variance - Homoscedastic
+
+# a "residuals versus fits plot" tests homogeneity of variance
+plot(model, 1)
+
+# the three tests below also do this. For all the null hypothesis is that variance is homogeneous (Homoscedasticity)
+# Levene and fligner are robust against departures from normality. 
+exponential_phase_slopes %>% levene_test(growth_rate ~ group)
+
+fligner.test(growth_rate ~ group, data = exponential_phase_slopes)
+
+bartlett.test(growth_rate ~ group, data = exponential_phase_slopes)
+
+# ANOVA - significantly different 
+res.aov <- exponential_phase_slopes %>% anova_test(growth_rate ~ group)
+res.aov
+
+# Tukey post-hoc tests to perform multiple pairwise comparisons between groups. Same groups still different. 
+pwc <- exponential_phase_slopes %>% tukey_hsd(growth_rate ~ group)
+pwc
+
+# Visualization: box plots with p-values
+pwc <- pwc %>% add_xy_position(x = "group")
+ggboxplot(exponential_phase_slopes, x = "group", y = "growth_rate") +
+  stat_pvalue_manual(pwc, hide.ns = TRUE) +
+  labs(
+    subtitle = get_test_label(res.aov, detailed = TRUE),
+    caption = get_pwc_label(pwc)
+  )
+
+```
+
+
+2) Kruskal-Wallis test without extreme outlier
+```{r}
+res.kruskal <- exponential_phase_slopes %>% kruskal_test(growth_rate ~ group)
+res.kruskal
+
+# eta squared, based on the H-statistic, is a measure of the Kruskal-Wallis test effect size.
+# the percentage of variance in the dependent variable explained by the independent variable.
+exponential_phase_slopes %>% kruskal_effsize(growth_rate ~ group)
+
+# pairwise comparisons - again control vs dmso and control vs mixture are significantly different. 
+# Compared to the Wilcoxon’s test, the Dunn’s test takes into account the rankings used 
+# by the Kruskal-Wallis test. It also does ties adjustments.
+pwc <- exponential_phase_slopes %>% 
+  dunn_test(growth_rate ~ group, p.adjust.method = "bonferroni") 
+pwc
+
+# Visualization: box plots with p-values
+pwc <- pwc %>% add_xy_position(x = "group")
+ggboxplot(exponential_phase_slopes, x = "group", y = "growth_rate") +
+  stat_pvalue_manual(pwc, hide.ns = TRUE) +
+  labs(
+    subtitle = get_test_label(res.kruskal, detailed = TRUE),
+    caption = get_pwc_label(pwc)
+  )
+
+```
 
