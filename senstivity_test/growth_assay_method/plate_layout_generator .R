@@ -4,7 +4,7 @@ wells <- data.frame(
 wells
 
 # for the insecticide plots rotate clockwise for each replicate
-wells$insecticides <- rep(c("malathion", "chlorpyrifos", "cypermethrin", "tefluthrin", "sulfoxaflor", "control", "blank", "thiacloprid", "acetamiprid", "imidacloprid", "flupyradifurone", "clothianidin"), each = 5)
+wells$insecticides <- rep(c("clothianidin", "malathion", "chlorpyrifos", "cypermethrin", "tefluthrin", "sulfoxaflor", "control", "blank", "thiacloprid", "acetamiprid", "imidacloprid", "flupyradifurone"), each = 5)
 
 concentrations <- c(0.001, 0.01, 0.1, 1, 5)
 
