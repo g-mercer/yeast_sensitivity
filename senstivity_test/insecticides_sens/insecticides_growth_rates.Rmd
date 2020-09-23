@@ -8,3 +8,23 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
 ```
+
+Machine Settings:
+
+* Number of Cycles - 192
+
+* Cycle Length - 300s
+
+* Wavelength - 600nm
+
+* Temperature - 30°C
+
+* Shake - Before Each Cycle (272s)
+
+* Shake Mode - Double Orbital
+
+* Shake Frequency - 200rpm
+
+* Total Well Volume - 200µl
+
+I combined all the replicates using zsh to output a formatted, compiled csv file called formatted_compiled. I then edited the names of controls and blanks using excel as it was easier. 
