@@ -27,4 +27,307 @@ Machine Settings:
 
 * Total Well Volume - 200µl
 
-I combined all the replicates using zsh to output a formatted, compiled csv file called formatted_compiled. I then edited the names of controls and blanks using excel as it was easier. 
+I combined all the replicates using zsh to output a formatted, compiled csv file called formatted_compiled. I then edited the names of controls and blanks.
+
+```{zsh raw-file-formatting, echo = TRUE}
+#!/usr/bin/env zsh
+
+# setwd
+cd /Users/guy/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/insecticides_sens
+
+./WHATIDID.sh 
+
+```
+
+```{r, include = FALSE}
+library(tidyverse)
+library(plyr)
+library(knitr)
+library(ggpubr)
+library(rstatix)
+``` 
+```{r, include = TRUE}
+r_packages <- installed.packages()[names(sessionInfo()$otherPkgs), "Version"]
+
+r_packages_df <- as.data.frame(r_packages)
+
+colnames(r_packages_df) <- c("Version")
+
+kable(r_packages_df)
+```
+
+The data first needed to be blank corrected. 
+
+```{r, include = FALSE}
+# set wd
+setwd("~/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/insecticides_sens//")
+# read csv
+insect_sens <- read.csv(file = "./results/form_comp_corr_blank_cont.csv", header = FALSE, stringsAsFactors = FALSE)
+
+# not correcting for blanks
+sens_data_form <- function(sens_data) {
+  # transpose
+  sens_data_trans <- t(sens_data)
+  # save first row as colnames
+  colnames(sens_data_trans) <- sens_data_trans [1, ]
+  # delete first row, which is now duplicate of colnames
+  sens_data_colnames <- sens_data_trans [-1, ]
+  # remove any empty rows. Sometimes created when importing csv file 
+  sens_data_no_blanks <- sens_data_colnames[rowSums(is.na(sens_data_colnames)) != ncol(sens_data_colnames),]
+  # save first column as rownames
+  rownames(sens_data_no_blanks) <- sens_data_no_blanks [ ,1]
+  # delete first column, which is now duplicate of rownames
+  sens_data_rownames <- sens_data_no_blanks [ ,-1]
+  # convert matrix into dataframe
+  sens_data_df <- as.data.frame(sens_data_rownames)
+  # remove blanks from sens_data_df
+  sens_data_nb <- sens_data_df %>% select(-(starts_with("blank")))
+  # convert everything to numeric
+  sens_data_nb[] <- lapply(sens_data_nb, function(x) {
+    if(is.factor(x)) as.numeric(as.character(x)) else x
+  })
+  # convert to data frame
+  sens_data_nb <- as.data.frame(sens_data_nb)
+}
+
+sens_data_corr <- sens_data_form(insect_sens)
+
+```
+
+Untransformed growth curves:
+
+```{r, include = FALSE}
+#treatments <- c("control", "acetamiprid-0.001", "acetamiprid-0.01", "acetamiprid-0.1", "acetamiprid-1","acetamiprid-5", "chlorpyrifos-0.001", "chlorpyrifos-0.01", "chlorpyrifos-0.1", "chlorpyrifos-1","chlorpyrifos-5", "clothianidin-0.001", "clothianidin-0.01", "clothianidin-0.1", "clothianidin-1","clothianidin-5", "cypermethrin-0.001", "cypermethrin-0.01", "cypermethrin-0.1", "cypermethrin-1","cypermethrin-5", "flupyradifurone-0.001", "flupyradifurone-0.01", "flupyradifurone-0.1", "flupyradifurone-1","flupyradifurone-5", "imidacloprid-0.001", "imidacloprid-0.01", "imidacloprid-0.1", "imidacloprid-1","imidacloprid-5", "malathion-0.001", "malathion-0.01", "malathion-0.1", "malathion-1", "malathion-5", "sulfoxaflor-0.001", "sulfoxaflor-0.01", "sulfoxaflor-0.1", "sulfoxaflor-1", "sulfoxaflor-5", "tefluthrin-0.001", "tefluthrin-0.01", "tefluthrin-0.1", "tefluthrin-1", "tefluthrin-5", "thiacloprid-0.001", "thiacloprid-0.01", "thiacloprid-0.1", "thiacloprid-1", "thiacloprid-5")
+
+treatments <- c("control", "cypermethrin-0.001", "cypermethrin-0.01", "cypermethrin-0.1", "cypermethrin-1","cypermethrin-5")
+
+untransformed_growth_curves <- function(treatments, sens_data_corr) {
+  
+summ_stats_all_treatments <- data.frame(matrix(nrow = 193, ncol = length(treatments)))
+colnames(summ_stats_all_treatments) <- treatments
+
+for (i in 1:length(treatments)) {
+  
+# extract only treatment x
+treatment <- sens_data_corr %>% select(starts_with(treatments[i]))
+# create time 
+time <- seq(0, 960, 5)
+# add time to first column 
+treatment$time <- time
+# convert from wide to long data format
+treatment_long <- treatment %>% gather(condition, OD, -time)
+# order treatment_long by time
+treatment_long_ord_time <- treatment_long[order(treatment_long$time),]
+# convert condition column to treatment
+treatment_long_ord_time$condition <- c("treatment")
+# summary stats
+summ_stats_treatment <- ddply(treatment_long_ord_time, c("time", "condition"), summarise, 
+                              N    = length(OD), 
+                              mean = mean(OD), 
+                              sd   = sd(OD), 
+                              se   = sd / sqrt(N)
+)
+
+summ_stats_all_treatments[ , i] <- summ_stats_treatment [ , 4]
+}
+summ_stats_all_treatments$time <- time 
+
+summ_stats_all_treatments_long <- summ_stats_all_treatments %>% gather(condition, OD, -time)
+
+summ_stats_all_treatments_long
+}
+
+meanOD_all_treatments_untransformed <- untransformed_growth_curves(treatments, sens_data_corr)
+
+one_graph_combined <- function(time_cond_OD, y_label) {
+  
+one_graph <- ggplot(data = time_cond_OD, aes(x=time, y=OD)) + 
+  geom_line(aes(colour=condition), alpha=0.4) +
+  ggtitle("") +
+  xlab(expression(Time)) +
+  ylab(y_label) +
+  theme(panel.background = element_rect(fill = "white"), plot.margin = margin(1, 1, 1, 1, "cm"),
+  axis.line = element_line(), plot.background = element_rect(
+    fill = "grey90",
+    colour = "black",
+    size = 1
+  )
+  )
+
+one_graph
+
+}
+y_label <- "OD"
+treatments_on_one_graph <- one_graph_combined(meanOD_all_treatments_untransformed, y_label)
+
+treatments_on_one_graph
+```
+
+For ln(OD~t~) vs time:
+
+```{r, include = FALSE}
+treatments <- c("control", "cypermethrin-0.001", "cypermethrin-0.01", "cypermethrin-0.1", "cypermethrin-1","cypermethrin-5")
+
+nodivt0_growth_curves <- function(treatments, sens_data_corr) {
+  
+  summ_stats_all_treatments <- data.frame(matrix(nrow = 193, ncol = length(treatments)))
+  colnames(summ_stats_all_treatments) <- treatments
+  
+  for (i in 1:length(treatments)) {
+    
+    # extract only treatment x
+    treatment <- sens_data_corr %>% select(starts_with(treatments[i]))
+    # create time 
+    time <- seq(0, 960, 5)
+    # log transform everything
+    log_treatment <- log(treatment)
+    # add time to first column 
+    log_treatment$time <- time
+    # convert from wide to long data format
+    treatment_long <- log_treatment %>% gather(condition, OD, -time)
+    # order treatment_long by time
+    treatment_long_ord_time <- treatment_long[order(treatment_long$time),]
+    # convert condition column to treatment
+    treatment_long_ord_time$condition <- c("treatment")
+    # summary stats
+    summ_stats_treatment <- ddply(treatment_long_ord_time, c("time", "condition"), summarise, 
+                                  N    = length(OD), 
+                                  mean = mean(OD), 
+                                  sd   = sd(OD), 
+                                  se   = sd / sqrt(N)
+    )
+    
+    summ_stats_all_treatments[ , i] <- summ_stats_treatment [ , 4]
+  }
+  summ_stats_all_treatments$time <- time 
+  
+  summ_stats_all_treatments_long <- summ_stats_all_treatments %>% gather(condition, OD, -time)
+  
+  summ_stats_all_treatments_long
+}
+
+meanOD_all_treatments_nodivt0 <- nodivt0_growth_curves(treatments, sens_data_corr)
+
+y_label <- "ln(OD)"
+
+treatments_on_one_graph <- one_graph_combined(meanOD_all_treatments_nodivt0, y_label)
+
+treatments_on_one_graph
+
+```
+
+Identify timepoint windows ≥80% maximum gradient:
+
+```{r}
+
+treatments <- colnames(sens_data_corr)
+
+maximum_growth_rate_individual_replicates <- function(treatments, sens_data_corr) {
+  
+  max_slopes_table <- tibble()
+  
+    # create time 
+    time <- seq(0, 960, 5)
+    # log transform everything
+    log_treatment <- log(sens_data_corr)
+   
+    for (i in 1:length(log_treatment)) {
+    time_mean_treatment <- data.frame(time = time, OD = log_treatment[, i])  
+
+    # calcularing gradient of 5 time point windows along linearised treatment growth curve. 
+    VAR <- seq(1, 189, 1)
+    treatment_tframeslope <- data.frame(matrix(nrow = 189, ncol = 1))
+    
+    for (k in 1:length(VAR)) {
+      treatment_window <- time_mean_treatment [((VAR[k]):(VAR[k]+4)), ]
+      treatment_lm <- lm(formula = OD ~ time, data = treatment_window)
+      treatment_slope <- treatment_lm$coefficients[2]
+      treatment_tframeslope[VAR[k] , ] <- treatment_slope
+    }
+    
+    start <- seq (0, 940, 5)
+    
+    end <- seq (20, 960, 5)
+    
+    treatment_gradients <- data.frame(start_time=start, end_time=end, slope=treatment_tframeslope)
+    
+    colnames(treatment_gradients) <- c("start_time", "end_time", "slope")
+    
+    colMax <- function(data) sapply(data, max, na.rm = TRUE)
+    
+    # find the maximum slope and return windows that are ≥ 80% of the maximum gradient
+    treatment_max <- colMax(treatment_gradients)
+    
+    treatment_max_df <- data.frame(treatment_max)
+    
+    treatment_max_slope <- treatment_max_df [3, 1]
+    
+    treatment_expo_phase_timepoints <- which(treatment_gradients$slope >= (0.80*treatment_max_slope))
+    
+    max_slopes_table [i , 1] <- treatment_max_slope
+    
+    max_slopes_table [i , 2] <- treatments[i]
+    
+    max_slopes_table [i , 3] <- list(list(treatment_expo_phase_timepoints))
+    
+  }
+  colnames(max_slopes_table) <- c("Maximum Gradient", "Treatment", "Timepoint Windows ≥80% of Maximum Gradient")
+  
+  max_slopes_table
+}
+
+treatments <- colnames(sens_data_corr)
+
+maximum_growth_rate_table <- maximum_growth_rate_individual_replicates(treatments, sens_data_corr)
+
+kable(maximum_growth_rate_table, caption = "Maximum Gradients of Insecticide Treated Yeast Cells and Associated Timepoint Windows")
+
+```
+
+Process to ensure exponential phase is continuous for each replicate:
+
+```{r}
+exponential_phase <- function(maximum_growth_rate_table, treatments, sens_data_corr) {
+  
+  sens_data_corr_log <- log(sens_data_corr)
+  time <- seq(0, 950, 5)
+  expo_phase_slope_ouput <- data.frame(matrix(nrow = length(treatments), ncol = 2))
+  
+  for (i in 1:length(treatments)) {
+  time_windows <- maximum_growth_rate_table [i , 3]
+  time_windows_vector <- unlist(time_windows, use.names=FALSE)
+  
+  # splits the vector where the gap between values is >5. 
+  expo_phase <- split(time_windows_vector, cumsum(c(1, diff(time_windows_vector) > 5 )))
+  
+  # returns the longest generated list. Remember that this list contains timepoint windows.
+  expo_phase_longest <- expo_phase [which.max(lengths(expo_phase))]
+  expo_phase_longest_vector <- unlist(expo_phase_longest, use.names=FALSE)
+  
+  # extract from sens_data_corr_log the expo_phase for each replicate. Add 4 because indexing corresponds to beginning of timepoint window not end. 
+  expo_phase_points <- sens_data_corr_log [expo_phase_longest_vector[which.min(expo_phase_longest_vector)]:(expo_phase_longest_vector[which.max(expo_phase_longest_vector)]+4), i]
+  
+  expo_phase_points_df <- as.data.frame(expo_phase_points)
+  expo_phase_points_df$time <- time [expo_phase_longest_vector[which.min(expo_phase_longest_vector)]:(expo_phase_longest_vector[which.max(expo_phase_longest_vector)]+4)]
+  
+  expo_phase_lm <- lm(formula = expo_phase_points ~ time, data = expo_phase_points_df)
+  expo_phase_slope <- expo_phase_lm$coefficients[2]
+  
+  expo_phase_slope_ouput [i , 2] <- expo_phase_slope
+  expo_phase_slope_ouput [i , 1] <- treatments [i]
+  }
+  expo_phase_slope_ouput
+} 
+
+exponential_phase_slopes <- exponential_phase(maximum_growth_rate_table, treatments, sens_data_corr)
+
+# give replicates the same name according to their treatment
+exponential_phase_slopes_group_names <- str_replace_all(exponential_phase_slopes [ , 1], "-\\d*$", "")
+exponential_phase_slopes [ , 1] <- exponential_phase_slopes_group_names
+
+colnames(exponential_phase_slopes) <- c("group", "growth_rate")
+
+kable(exponential_phase_slopes, caption = "Individual Replicates With Associated Exponential Phase Growth Rate (OD/min)")
+```
+
+Maximum gradient appears to vary widely, even in controls. Identifying exponential phase by taking timepoint windows ≥80% of maximum returns few timepoint windows when maximum gradient is high. Knockon effect is exponential phase isn't correctly defined. 

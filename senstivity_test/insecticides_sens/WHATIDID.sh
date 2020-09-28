@@ -54,14 +54,14 @@ awk '{gsub("blank-[0-9].[0-9]*-[0-9]*",-NR,$0);print}' tmp/only-blanks > tmp/bla
 awk '{gsub("blank-[0-9]-[0-9]",-NR,$0);print}' tmp/blanks-row-name > tmp/blanks-row-name-1
 
 # paste files together and combine columns
-paste -d, tmp/blank tmp/blanks-row-name-1 | sed 's/,//1' > tmp/blanks-correct-name          
+paste -d, tmp/blank tmp/blanks-row-name-1 | sed 's/,//1' > tmp/blanks-correct-name
 
 # replace blank rows in tmp/no_sulfox_678 with tmp/blanks-correct-name
 grep -E -v 'blank.\d*.\d*.\d*,' tmp/no_sulfox_678 > tmp/no_sulfox_678_no_blank
 
 cat tmp/blanks-correct-name >> tmp/no_sulfox_678_no_blank
 
-head -n +465 tmp/no_sulfox_678_no_blank > tmp/no_sulfox_678_corr_blanks.csv
+head -n +466 tmp/no_sulfox_678_no_blank > tmp/no_sulfox_678_corr_blanks.csv
 
 # remove only controls
 grep 'control' tmp/no_sulfox_678_corr_blanks.csv > tmp/only-controls
@@ -81,7 +81,7 @@ grep -E -v 'control.\d*.\d*.\d*,' tmp/no_sulfox_678_corr_blanks.csv > tmp/no_sul
 
 cat tmp/controls-correct-name >> tmp/no_sulfox_678_corr_blanks_no_control.csv
 
-head -n +465 tmp/no_sulfox_678_corr_blanks_no_control.csv > tmp/no_sulfox_678_corr_blanks_corr_controls.csv
+head -n +466 tmp/no_sulfox_678_corr_blanks_no_control.csv > tmp/no_sulfox_678_corr_blanks_corr_controls.csv
 
 cp tmp/no_sulfox_678_corr_blanks_corr_controls.csv results/form_comp_corr_blank_cont.csv
 
