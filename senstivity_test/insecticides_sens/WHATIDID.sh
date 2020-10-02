@@ -63,27 +63,29 @@ cat tmp/blanks-correct-name >> tmp/no_sulfox_678_no_blank
 
 head -n +466 tmp/no_sulfox_678_no_blank > tmp/no_sulfox_678_corr_blanks.csv
 
+cp tmp/no_sulfox_678_corr_blanks.csv results/form_comp_corr_blank_cont.csv
+
 # remove only controls
-grep 'control' tmp/no_sulfox_678_corr_blanks.csv > tmp/only-controls
+#grep 'control' tmp/no_sulfox_678_corr_blanks.csv > tmp/only-controls
 
 # create control file
-perl -E 'say "control " x 40' | tr " " "\n" > tmp/control
+#perl -E 'say "control " x 40' | tr " " "\n" > tmp/control
 
 # replace control-.... with -line number
-awk '{gsub("control-[0-9].[0-9]*-[0-9]*",-NR,$0);print}' tmp/only-controls > tmp/controls-row-name
-awk '{gsub("control-[0-9]-[0-9]",-NR,$0);print}' tmp/controls-row-name > tmp/controls-row-name-1
+#awk '{gsub("control-[0-9].[0-9]*-[0-9]*",-NR,$0);print}' tmp/only-controls > tmp/controls-row-name
+#awk '{gsub("control-[0-9]-[0-9]",-NR,$0);print}' tmp/controls-row-name > tmp/controls-row-name-1
 
 # paste files together and combine columns
-paste -d, tmp/control tmp/controls-row-name-1 | sed 's/,//1' > tmp/controls-correct-name
+#paste -d, tmp/control tmp/controls-row-name-1 | sed 's/,//1' > tmp/controls-correct-name
 
 # replace control rows in tmp/no_sulfox_678_corr_blanks.csv with tmp/controls-correct-name
-grep -E -v 'control.\d*.\d*.\d*,' tmp/no_sulfox_678_corr_blanks.csv > tmp/no_sulfox_678_corr_blanks_no_control.csv
+#grep -E -v 'control.\d*.\d*.\d*,' tmp/no_sulfox_678_corr_blanks.csv > tmp/no_sulfox_678_corr_blanks_no_control.csv
 
-cat tmp/controls-correct-name >> tmp/no_sulfox_678_corr_blanks_no_control.csv
+#cat tmp/controls-correct-name >> tmp/no_sulfox_678_corr_blanks_no_control.csv
 
-head -n +466 tmp/no_sulfox_678_corr_blanks_no_control.csv > tmp/no_sulfox_678_corr_blanks_corr_controls.csv
+#head -n +466 tmp/no_sulfox_678_corr_blanks_no_control.csv > tmp/no_sulfox_678_corr_blanks_corr_controls.csv
 
-cp tmp/no_sulfox_678_corr_blanks_corr_controls.csv results/form_comp_corr_blank_cont.csv
+#cp tmp/no_sulfox_678_corr_blanks_corr_controls.csv results/form_comp_corr_blank_cont.csv
 
 # function format_insecticide_assay_data(){
 

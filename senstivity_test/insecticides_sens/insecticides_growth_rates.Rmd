@@ -56,7 +56,7 @@ colnames(r_packages_df) <- c("Version")
 kable(r_packages_df)
 ```
 
-The data first needed to be blank corrected. 
+Data isn't blank corrected to avoid negative values. 
 
 ```{r, include = FALSE}
 # set wd
@@ -96,10 +96,8 @@ sens_data_corr <- sens_data_form(insect_sens)
 
 Untransformed growth curves:
 
-```{r, include = FALSE}
-#treatments <- c("control", "acetamiprid-0.001", "acetamiprid-0.01", "acetamiprid-0.1", "acetamiprid-1","acetamiprid-5", "chlorpyrifos-0.001", "chlorpyrifos-0.01", "chlorpyrifos-0.1", "chlorpyrifos-1","chlorpyrifos-5", "clothianidin-0.001", "clothianidin-0.01", "clothianidin-0.1", "clothianidin-1","clothianidin-5", "cypermethrin-0.001", "cypermethrin-0.01", "cypermethrin-0.1", "cypermethrin-1","cypermethrin-5", "flupyradifurone-0.001", "flupyradifurone-0.01", "flupyradifurone-0.1", "flupyradifurone-1","flupyradifurone-5", "imidacloprid-0.001", "imidacloprid-0.01", "imidacloprid-0.1", "imidacloprid-1","imidacloprid-5", "malathion-0.001", "malathion-0.01", "malathion-0.1", "malathion-1", "malathion-5", "sulfoxaflor-0.001", "sulfoxaflor-0.01", "sulfoxaflor-0.1", "sulfoxaflor-1", "sulfoxaflor-5", "tefluthrin-0.001", "tefluthrin-0.01", "tefluthrin-0.1", "tefluthrin-1", "tefluthrin-5", "thiacloprid-0.001", "thiacloprid-0.01", "thiacloprid-0.1", "thiacloprid-1", "thiacloprid-5")
-
-treatments <- c("control", "cypermethrin-0.001", "cypermethrin-0.01", "cypermethrin-0.1", "cypermethrin-1","cypermethrin-5")
+```{r, include = TRUE}
+treatments <- c("control-", "acetamiprid-0.001", "acetamiprid-0.01", "acetamiprid-0.1", "acetamiprid-1","acetamiprid-5", "chlorpyrifos-0.001", "chlorpyrifos-0.01", "chlorpyrifos-0.1", "chlorpyrifos-1","chlorpyrifos-5", "clothianidin-0.001", "clothianidin-0.01", "clothianidin-0.1", "clothianidin-1","clothianidin-5", "cypermethrin-0.001", "cypermethrin-0.01", "cypermethrin-0.1", "cypermethrin-1","cypermethrin-5", "flupyradifurone-0.001", "flupyradifurone-0.01", "flupyradifurone-0.1", "flupyradifurone-1","flupyradifurone-5", "imidacloprid-0.001", "imidacloprid-0.01", "imidacloprid-0.1", "imidacloprid-1","imidacloprid-5", "malathion-0.001", "malathion-0.01", "malathion-0.1", "malathion-1", "malathion-5", "sulfoxaflor-0.001", "sulfoxaflor-0.01", "sulfoxaflor-0.1", "sulfoxaflor-1", "sulfoxaflor-5", "tefluthrin-0.001", "tefluthrin-0.01", "tefluthrin-0.1", "tefluthrin-1", "tefluthrin-5", "thiacloprid-0.001", "thiacloprid-0.01", "thiacloprid-0.1", "thiacloprid-1", "thiacloprid-5")
 
 untransformed_growth_curves <- function(treatments, sens_data_corr) {
   
@@ -146,6 +144,7 @@ one_graph <- ggplot(data = time_cond_OD, aes(x=time, y=OD)) +
   ggtitle("") +
   xlab(expression(Time)) +
   ylab(y_label) +
+  theme(legend.position = "none") +
   theme(panel.background = element_rect(fill = "white"), plot.margin = margin(1, 1, 1, 1, "cm"),
   axis.line = element_line(), plot.background = element_rect(
     fill = "grey90",
@@ -166,7 +165,7 @@ treatments_on_one_graph
 For ln(OD~t~) vs time:
 
 ```{r, include = FALSE}
-treatments <- c("control", "cypermethrin-0.001", "cypermethrin-0.01", "cypermethrin-0.1", "cypermethrin-1","cypermethrin-5")
+treatments <- c("control-", "cypermethrin-0.001", "cypermethrin-0.01", "cypermethrin-0.1", "cypermethrin-1","cypermethrin-5")
 
 nodivt0_growth_curves <- function(treatments, sens_data_corr) {
   
@@ -331,3 +330,134 @@ kable(exponential_phase_slopes, caption = "Individual Replicates With Associated
 ```
 
 Maximum gradient appears to vary widely, even in controls. Identifying exponential phase by taking timepoint windows ≥80% of maximum returns few timepoint windows when maximum gradient is high. Knockon effect is exponential phase isn't correctly defined. 
+
+```{r}
+individual_replicates_long <- function(replicates) {
+ 
+   time <- seq(0, 960, 5)
+  
+  replicates$time <- time
+  
+  replicates_long <- replicates %>% gather(condition, OD, -time)
+  
+  replicates_long 
+}
+just_controls <- sens_data_corr %>% select(starts_with("control"))
+
+some_controls <- just_controls [ , c(1:10, 16:34)]
+
+just_thia_5 <- sens_data_corr %>% select(starts_with("thiacloprid-5"))
+
+insecti_indiv_repli <- individual_replicates_long(just_controls)
+
+insecti_indiv_repli_1 <- individual_replicates_long(just_thia_5)
+
+insecti_indiv_repli_2 <- individual_replicates_long(some_controls)
+
+y_label <- "OD"
+
+all_controls_no_legend <- one_graph_combined(insecti_indiv_repli, y_label)
+
+all_controls_no_legend
+
+all_thia5s_no_legend <- one_graph_combined(insecti_indiv_repli_1, y_label)
+
+all_thia5s_no_legend
+
+some_controls_no_legend <- one_graph_combined(insecti_indiv_repli_2, y_label)
+
+some_controls_no_legend
+```
+Looking at the control replicates, day 3 and day 8 displayed unusual growth and one replicate from day 7. Exclude these days and only look at 6 days that had comparable control growth. Look at replicates from 6 days with standard control growth. 
+
+```{r}
+all_replicates <- individual_replicates_long(sens_data_corr)
+
+all_replicates_plot <- one_graph_combined(all_replicates, y_label)
+
+all_replicates_plot
+
+no_day_3_8 <- sens_data_corr %>% select(-(matches("\\w*-\\d*-3")))
+no_day_3_8_1 <- no_day_3_8 %>% select(-(matches("\\w*-\\d*.\\d*-3")))
+no_day_3_8_2 <- no_day_3_8_1 %>% select(-(matches("\\w*-\\d*-8")))
+no_day_3_8_3 <- no_day_3_8_2 %>% select(-(matches("\\w*-\\d*.\\d*-8")))
+
+insecti_indiv_repli_no_day_3_8_complete <- individual_replicates_long(no_day_3_8)
+
+filtered_replicates <- one_graph_combined(insecti_indiv_repli_no_day_3_8_complete, y_label)
+
+filtered_replicates
+```
+
+remove cypermethrin 5 due to solubility issues
+
+```{r}
+no_day_3_8_cyper_5 <- no_day_3_8 %>% select(-(matches("cypermethrin-5-\\d")))
+
+no_day_3_8_cyper_5_long <- individual_replicates_long(no_day_3_8_cyper_5)
+
+no_day_3_8_cyper_5_plot <- one_graph_combined(no_day_3_8_cyper_5_long, y_label)
+
+no_day_3_8_cyper_5_plot
+```
+
+Filter out 4 replicates anomalies. 
+
+```{r}
+anomalies <- which(no_day_3_8_cyper_5 [1 , ] > 0.3)
+anomalies_1 <- which(no_day_3_8_cyper_5 [10 , ] > 0.5)
+
+no_day_3_8_cyper_5_na <- no_day_3_8_cyper_5 [ , c(-anomalies, -anomalies_1)]
+
+no_day_3_8_cyper_5_na_long <- individual_replicates_long(no_day_3_8_cyper_5_na)
+
+no_day_3_8_cyper_5_na_plot <- one_graph_combined(no_day_3_8_cyper_5_na_long, y_label)
+
+no_day_3_8_cyper_5_na_plot
+```
+
+Another approach would be to look at the results day by day:
+
+```{r}
+
+day_1 <- sens_data_corr %>% select(matches("*-1$"))
+
+day_1_long <- individual_replicates_long(day_1)
+
+day_1_plot <- one_graph_combined(day_1_long, y_label)
+
+day_1_plot
+```
+
+make a function to do all days
+
+```{r}
+by_day_function <- function(day, sens_data_corr) {
+  
+  day_pattern <- paste0("*-", day, "$", sep = "")
+
+  day_x <- sens_data_corr %>% select(matches(day_pattern))
+  
+  day_x_long <- individual_replicates_long(day_x)
+  
+  y_label <- "OD"
+
+  day_x_plot <- one_graph_combined(day_x_long, y_label)
+
+  day_x_plot
+}
+
+plot_list <- list()
+
+for (day in 1:8) {
+  
+  plot <- by_day_function(day, sens_data_corr)
+  
+  plot_list[[day]] <- plot
+  
+}
+
+plot_list
+
+```
+
