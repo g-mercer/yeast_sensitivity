@@ -1,0 +1,216 @@
+---
+title: "insecticides_growthcurver"
+author: "Guy Mercer"
+date: "02/10/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+Machine Settings:
+
+* Number of Cycles - 192
+
+* Cycle Length - 300s
+
+* Wavelength - 600nm
+
+* Temperature - 30°C
+
+* Shake - Before Each Cycle (272s)
+
+* Shake Mode - Double Orbital
+
+* Shake Frequency - 200rpm
+
+* Total Well Volume - 200µl
+
+I combined all the replicates using zsh to output a formatted, compiled csv file called formatted_compiled. I then edited the names of controls and blanks.
+
+```{zsh raw-file-formatting, echo = TRUE}
+#!/usr/bin/env zsh
+
+# setwd
+cd /Users/guy/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/insecticides_sens
+
+./WHATIDID.sh 
+
+```
+
+```{r, include = FALSE}
+library(tidyverse)
+library(knitr)
+library(growthcurver)
+``` 
+```{r, include = TRUE}
+r_packages <- installed.packages()[names(sessionInfo()$otherPkgs), "Version"]
+
+r_packages_df <- as.data.frame(r_packages)
+
+colnames(r_packages_df) <- c("Version")
+
+kable(r_packages_df)
+```
+
+get data in right format, one column per well, one time column and one blank column. 
+
+```{r, include = FALSE}
+# set wd
+setwd("~/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/insecticides_sens/")
+# read csv
+insect_sens <- read.csv(file = "./results/form_comp_corr_blank_cont.csv", header = FALSE, stringsAsFactors = FALSE)
+
+sens_data_form <- function(sens_data) {
+  # transpose
+  sens_data_trans <- t(sens_data)
+  # save first row as colnames
+  colnames(sens_data_trans) <- sens_data_trans [1, ]
+  # delete first row, which is now duplicate of colnames
+  sens_data_colnames <- sens_data_trans [-1, ]
+  # remove any empty rows. Sometimes created when importing csv file 
+  sens_data_no_blanks <- sens_data_colnames[rowSums(is.na(sens_data_colnames)) != ncol(sens_data_colnames),]
+  # convert matrix into dataframe
+  sens_data_df <- as.data.frame(sens_data_no_blanks)
+  # convert everything to numeric
+  sens_data_df[] <- lapply(sens_data_df, function(x) {
+    if(is.factor(x)) as.numeric(as.character(x)) else x
+  })
+  # convert to data frame
+  sens_data_corr <- as.data.frame(sens_data_df)
+}
+
+sens_data_corr <- sens_data_form(insect_sens)
+
+# set any negative values to 0
+sens_data_corr[sens_data_corr<0] <- 0
+```
+
+```{r}
+# useful command for filtering column contents
+# gc_out_filtered <- gc_out %>% filter(note != "cannot fit data") 
+```
+
+Now the data is in the right format use Growthcurver. To retrieve r_se and r_p as well as the other summary information columns have to be looped through individually.
+
+```{r, message = FALSE, fig.width = 7}
+# Let's create an output data frame to store the results in. 
+# We'll create it so that it is the right size (it's faster this way!), 
+# but leave it empty.
+num_analyses <- length(names(sens_data_corr)) - 1
+d_gc <- data.frame(sample = character(num_analyses),
+                   k = numeric(num_analyses),
+                   n0  = numeric(num_analyses),
+                   r = numeric(num_analyses),
+                   r_se = numeric(num_analyses),
+                   r_p = numeric(num_analyses),
+                   t_mid = numeric(num_analyses),
+                   t_gen = numeric(num_analyses),
+                   auc_l = numeric(num_analyses),
+                   auc_e = numeric(num_analyses),
+                   sigma = numeric(num_analyses),
+                   stringsAsFactors = FALSE)
+
+# Now, loop through all of the columns in the data frame. For each column,
+# run Growthcurver, save the most useful metrics in the output data frame,
+# and make a plot of all the growth curve data and their best fits.
+
+par(mfcol = c(8,12))
+par(mar = c(0.25,0.25,0.25,0.25))
+y_lim_max <- max(sens_data_corr[,setdiff(names(sens_data_corr), "time")]) - min(sens_data_corr[,setdiff(names(sens_data_corr), "time")])
+
+n <- 1    # keeps track of the current row in the output data frame
+for (col_name in names(sens_data_corr)) {
+  
+  # Don't process the column called "time". 
+  # It contains time and not absorbance data.
+  if (col_name != "time") {
+
+    # Create a temporary data frame that contains just the time and current col
+    sens_data_corr_loop <- sens_data_corr[, c("time", col_name)]
+    
+    # Now, call Growthcurver to calculate the metrics using SummarizeGrowth
+    gc_fit <- SummarizeGrowth(data_t = sens_data_corr_loop[, "time"], 
+                              data_n = sens_data_corr_loop[, col_name],
+                              bg_correct = "none")
+    
+    # Now, add the metrics from this column to the next row (n) in the 
+    # output data frame, and increment the row counter (n)
+    d_gc$sample[n] <- col_name
+    d_gc[n, 2:11] <- c(gc_fit$vals$k,
+                      gc_fit$vals$n0,
+                      gc_fit$vals$r,
+                      gc_fit$vals$r_se,
+                      gc_fit$vals$r_p,
+                      gc_fit$vals$t_mid,
+                      gc_fit$vals$t_gen,
+                      gc_fit$vals$auc_l,
+                      gc_fit$vals$auc_e,
+                      gc_fit$vals$sigma)
+    n <- n + 1
+    
+    # Finally, plot the raw data and the fitted curve
+    # Here, I'll just print some of the data points to keep the file size smaller
+    n_obs <- length(gc_fit$data$t)
+    plot(gc_fit$data$t, gc_fit$data$N, 
+         pch = 20, 
+         xlim = c(0, 960), 
+         ylim = c(0, y_lim_max),
+         cex = 0.6, xaxt = "n", yaxt = "n")
+    text(x = 960 / 2, y = y_lim_max, labels = col_name, pos = 1)
+    lines(gc_fit$data$t, predict(gc_fit$model),col = "red")
+  }
+}
+
+# Uncomment the next line to save the plots from your 96-well plate to a file
+# dev.off()
+```
+
+Sigma values represent the residual sum of squares from the fit of the logistic curve to the data, so larger values mean poorer fits.
+
+```{R, eval = TRUE, message = FALSE}
+d_gc <- as_data_frame(d_gc)
+
+# Plot a histogram of the sigma values in order to check for outliers
+hist(d_gc$sigma, main = "Histogram of sigma values", xlab = "sigma")
+
+```
+
+Are my outliers high insecticide concentrations? Cypermethrin-5 had solubility issues, which resulted in the curve starting with artificially high OD readings. 7/8 Cypermethrin-5 are in the top 50 sigma scores. Not really surprising. 
+
+``` {R, eval = FALSE, message = FALSE}
+# Show the top 50 samples with the largest sigma value 
+# (with the worst model fit to the growth curve data)
+high_sigma <- d_gc %>% top_n(50, sigma) %>% arrange(desc(sigma))
+```
+
+One additional method for identifying outlier parameters is to conduct a principal components analysis on the samples, which projects high dimensional data on lower dimensional space. Plotting the samples on the first two principal components (PC1 and PC2) can identify natural clusters within the growth curve data as well as outliers.
+
+```{R, eval = TRUE, message = FALSE}
+
+
+pca_gc_out <- as_data_frame(d_gc) 
+
+# Prepare the gc_out data for the PCA
+rownames(pca_gc_out) <- pca_gc_out$sample
+
+# Do the PCA
+pca.res <- prcomp(pca_gc_out %>% select(k:sigma), center=TRUE, scale=TRUE)
+
+# Plot the results
+as_data_frame(list(PC1=pca.res$x[,1],
+                   PC2=pca.res$x[,2],
+                   samples = rownames(pca_gc_out))) %>% 
+  ggplot(aes(x=PC1,y=PC2, label=samples)) + 
+  geom_text(size = 2)
+```
+
+When looking at the graph for thiacloprid-5-4 it is apparent it is an outlier.  
+
+```{r}
+# useful command for filtering column contents
+# gc_out_filtered <- gc_out %>% filter(note != "cannot fit data") 
+```
+
+Need to remove outliers through a combination of PCA, sigma values and visual inspection of plots. Then, take AUC and r for remaining wells and calculate averages for each condition over the remaining replicates. How to incorporate standard error for individual r values in average r values? Then plot this onto a dose response curve. Is there any effect? Does r and AUC decrease with increasing pesticide concentration? Or no effect? Or unexpected effect, which might suggest incorrect experimental design (inaccurate initial cell number, solubility of cypermethrin, not all in mid-log phase growth at the beginning)

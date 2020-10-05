@@ -60,7 +60,7 @@ Data isn't blank corrected to avoid negative values.
 
 ```{r, include = FALSE}
 # set wd
-setwd("~/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/insecticides_sens//")
+setwd("~/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/insecticides_sens/")
 # read csv
 insect_sens <- read.csv(file = "./results/form_comp_corr_blank_cont.csv", header = FALSE, stringsAsFactors = FALSE)
 
