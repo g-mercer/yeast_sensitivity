@@ -43,6 +43,7 @@ cd /Users/guy/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/insectici
 library(tidyverse)
 library(knitr)
 library(growthcurver)
+library(pastecs)
 ``` 
 ```{r, include = TRUE}
 r_packages <- installed.packages()[names(sessionInfo()$otherPkgs), "Version"]
@@ -183,6 +184,8 @@ Are my outliers high insecticide concentrations? Cypermethrin-5 had solubility i
 # Show the top 50 samples with the largest sigma value 
 # (with the worst model fit to the growth curve data)
 high_sigma <- d_gc %>% top_n(50, sigma) %>% arrange(desc(sigma))
+
+high_sigma 
 ```
 
 One additional method for identifying outlier parameters is to conduct a principal components analysis on the samples, which projects high dimensional data on lower dimensional space. Plotting the samples on the first two principal components (PC1 and PC2) can identify natural clusters within the growth curve data as well as outliers.
@@ -213,4 +216,50 @@ When looking at the graph for thiacloprid-5-4 it is apparent it is an outlier.
 # gc_out_filtered <- gc_out %>% filter(note != "cannot fit data") 
 ```
 
-Need to remove outliers through a combination of PCA, sigma values and visual inspection of plots. Then, take AUC and r for remaining wells and calculate averages for each condition over the remaining replicates. How to incorporate standard error for individual r values in average r values? Then plot this onto a dose response curve. Is there any effect? Does r and AUC decrease with increasing pesticide concentration? Or no effect? Or unexpected effect, which might suggest incorrect experimental design (inaccurate initial cell number, solubility of cypermethrin, not all in mid-log phase growth at the beginning)
+Need to remove outliers through a combination of PCA, sigma values and visual inspection of plots. Removed chlorpyrifos-0.1-7, tefluthrin-0.1-7, control-5-7 (when I knocked the plate and droplet went on lid) and cypermethrin-5-3, cypermethrin-5-6, thiacloprid-5-4, thiacloprid-5-5. 
+
+```{r}
+
+anomalies <- c("chlorpyrifos-0.1-7", "tefluthrin-0.1-7", "control-5-7", "thiacloprid-5-4", "thiacloprid-5-5", "cypermethrin-5-1", "cypermethrin-5-2", "cypermethrin-5-3", "cypermethrin-5-4", "cypermethrin-5-5", "cypermethrin-5-6", "cypermethrin-5-7", "cypermethrin-5-8")
+
+for (names in anomalies) {
+  
+  d_gc <- d_gc %>% filter(sample != names)
+  
+}
+
+```
+
+Then, take AUC and r for remaining wells and calculate averages for each condition over the remaining replicates. How to incorporate standard error for individual r values in average r values? 
+
+```{r}
+conditions_separately <- list()
+conditions_stats <- tibble()
+
+conditions <- c("control-", "acetamiprid-0.001", "acetamiprid-0.01", "acetamiprid-0.1", "acetamiprid-1","acetamiprid-5", "chlorpyrifos-0.001", "chlorpyrifos-0.01", "chlorpyrifos-0.1", "chlorpyrifos-1","chlorpyrifos-5", "clothianidin-0.001", "clothianidin-0.01", "clothianidin-0.1", "clothianidin-1","clothianidin-5", "cypermethrin-0.001", "cypermethrin-0.01", "cypermethrin-0.1", "cypermethrin-1", "flupyradifurone-0.001", "flupyradifurone-0.01", "flupyradifurone-0.1", "flupyradifurone-1","flupyradifurone-5", "imidacloprid-0.001", "imidacloprid-0.01", "imidacloprid-0.1", "imidacloprid-1","imidacloprid-5", "malathion-0.001", "malathion-0.01", "malathion-0.1", "malathion-1", "malathion-5", "sulfoxaflor-0.001", "sulfoxaflor-0.01", "sulfoxaflor-0.1", "sulfoxaflor-1", "sulfoxaflor-5", "tefluthrin-0.001", "tefluthrin-0.01", "tefluthrin-0.1", "tefluthrin-1", "tefluthrin-5", "thiacloprid-0.001", "thiacloprid-0.01", "thiacloprid-0.1", "thiacloprid-1", "thiacloprid-5")
+
+for (name in 1:length(conditions)) {
+  
+  conditions_grouped <- d_gc %>% filter(str_detect(sample, conditions[name]))
+  
+  conditions_separately [name] <- conditions_grouped [ ,9]
+  
+  names(conditions_separately) [name] <- conditions[name]
+  
+  summ_stat <- stat.desc(conditions_separately[[name]])
+  
+  conditions_stats [name, 1] <- conditions[name]
+  
+  for (i in 1:length(summ_stat)) {
+    
+    conditions_stats [name, i+1] <- summ_stat [i]
+    
+  }
+  
+}
+
+colnames(conditions_stats) <- c("condition", "nbr.val", "nbr.null", "nbr.na", "min", "max", "range", "sum", "median", "mean", "SE.mean", "CI.mean.0.95", "var", "std.dev", "coef.var")
+
+```
+
+Then plot this onto a dose response curve. Is there any effect? Does r and AUC decrease with increasing pesticide concentration? Or no effect? Or unexpected effect, which might suggest incorrect experimental design (inaccurate initial cell number, solubility of cypermethrin, not all in mid-log phase growth at the beginning)
