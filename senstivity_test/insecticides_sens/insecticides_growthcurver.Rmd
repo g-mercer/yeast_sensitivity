@@ -44,6 +44,8 @@ library(tidyverse)
 library(knitr)
 library(growthcurver)
 library(pastecs)
+library(ibd)
+library(rstatix)
 ``` 
 ```{r, include = TRUE}
 r_packages <- installed.packages()[names(sessionInfo()$otherPkgs), "Version"]
@@ -365,12 +367,71 @@ plot_list
 
 ```
 
-Above I blindly decided to calculate the AUC mean. I don't know if my data is normally distributed. Visual inspection of day 8 replicates suggests that AUC may have been lower for all replicates on that day for some unknown reason (lower starting yeast concentration). If this is the case would this have skewed the data to the left (negative skew), where the mean would tend to be lower than the median. Median may be a better measure of central tendency. Let's look at the distribution of the data. 
+Look at the insecticides one by one. Doesn't make sense to me to convert 10 continuous independent variables into one categorical variable where linear regression would have to be dummy coded in. Contentious point. 
 
 ```{r}
-# give replicates same name for each group.
-sample_aucl <- d_gc [ , c(1,9)]
 
+# create a column for the day (categorical independent variable)
+sample_a <- d_gc [ , c(1,9)]
+
+days <- c("one", "two", "three", "four", "five", "six", "seven", "eight")
+
+sample_au <-  tibble()
+
+for (day in 1:length(days)) {
+  
+  day_pattern <- paste0("\\w*-.*-", day, sep = "")
+  
+  day_x <- sample_a %>% filter(str_detect(sample, day_pattern))
+  
+  day_x$day <- days [day]
+  
+ sample_au <- rbind(sample_au, day_x)
+}
+
+# create a column for the insecticide and control
+insecticide_control_name <- c(insecticide_names, "control")
+sample_auc <-  tibble()
+
+for (insecticide in 1:length(insecticide_control_name)) {
+  
+  by_insecticide <- sample_au %>% filter(str_detect(sample, insecticide_control_name [insecticide]))
+  
+  by_insecticide$insecticide <- insecticide_control_name [insecticide]
+  
+  sample_auc <- rbind(sample_auc, by_insecticide)
+
+}
+
+# give controls same name
+names <- sample_auc$sample
+
+sample_auc_control <- str_replace_all(names, "control-.*-\\d$", "control")
+
+sample_auc [ , 1] <- sample_auc_control
+
+# create a column for the concentration, add controls separately
+sample_aucl <- tibble()
+
+for (conc in 1:length(concentration)) {
+  
+  indiv_conc <- paste0("\\w*-", concentration [conc], "-", sep = "")
+  
+  by_concentration <- sample_auc %>% filter(str_detect(sample, indiv_conc))
+  
+  by_concentration$concentration <- concentration [conc]
+  
+  sample_aucl <- rbind(sample_aucl, by_concentration)
+  
+}
+
+controls_sep <- sample_auc %>% filter(str_detect(sample, "control"))
+
+controls_sep$concentration <- 0
+
+sample_aucl <- rbind(sample_aucl, controls_sep)
+
+# give replicates same name for each group.
 names <- sample_aucl$sample
 
 sample_aucl_control <- str_replace_all(names, "control-.*-\\d$", "control")
@@ -391,25 +452,75 @@ for (name in 1:length(replicate_name)) {
 
 sample_aucl [, 1] <- replicate_same_names 
 
+# separate replicates for each insecticide with the control
+insecticide_names <- c("acetamiprid", "chlorpyrifos", "clothianidin", "cypermethrin", "flupyradifurone", "imidacloprid", "malathion", "sulfoxaflor", "tefluthrin", "thiacloprid")
 
-# not sure on this at all. 
+# make control rows
+controls <- sample_aucl %>% filter(str_detect(sample, "control"))
 
-# set levels to match each insecticide concentration. 
-replicate_same_names <- replicate_same_names$...1
+replicate_insect_control <- list()
 
-unique_replicate_names <- unique(replicate_same_names)
+for (name in 1:length(insecticide_names)){
+  
+  insecticide_x <- sample_aucl %>% filter(str_detect(sample, insecticide_names[name]))
+  
+  insecticide_x_control <- rbind(insecticide_x, controls)
 
-sample_aucl <- sample_aucl %>%
-  reorder_levels(sample, order = unique_replicate_names)
+  replicate_insect_control [[name]]  <- insecticide_x_control
+  
+  names(replicate_insect_control) [[name]] <- insecticide_names[name]
 
-# Build the linear model
-model  <- lm(auc_l ~ sample, data = sample_aucl)
-
-# Create a QQ plot of residuals
-ggqqplot(residuals(model))
-
-# shapiro_test
-shapiro_test(residuals(model))
+}
 ```
 
-my data is non-normal. Should I be doing all insecticides at once or one by one. Isn't each set of insecticide concentrations an independent variable?
+```{r}
+# convert character names into corresponding numerical concentrations for each insecticide. Obviously need to try and loop this.
+replicate_insect_control$acetamiprid$sample <- str_replace_all(replicate_insect_control$acetamiprid$sample, "control", "0") %>% str_replace_all("\\w*-", "") %>% as.numeric()
+replicate_insect_control$chlorpyrifos$sample <- str_replace_all(replicate_insect_control$chlorpyrifos$sample, "control", "0") %>% str_replace_all("\\w*-", "") %>% as.numeric()
+replicate_insect_control$clothianidin$sample <- str_replace_all(replicate_insect_control$clothianidin$sample, "control", "0") %>% str_replace_all("\\w*-", "") %>% as.numeric()
+replicate_insect_control$cypermethrin$sample <- str_replace_all(replicate_insect_control$cypermethrin$sample, "control", "0") %>% str_replace_all("\\w*-", "") %>% as.numeric()
+replicate_insect_control$flupyradifurone$sample <- str_replace_all(replicate_insect_control$flupyradifurone$sample, "control", "0") %>% str_replace_all("\\w*-", "") %>% as.numeric()
+replicate_insect_control$imidacloprid$sample <- str_replace_all(replicate_insect_control$imidacloprid$sample, "control", "0") %>% str_replace_all("\\w*-", "") %>% as.numeric()
+replicate_insect_control$malathion$sample <- str_replace_all(replicate_insect_control$malathion$sample, "control", "0") %>% str_replace_all("\\w*-", "") %>% as.numeric()
+replicate_insect_control$sulfoxaflor$sample <- str_replace_all(replicate_insect_control$sulfoxaflor$sample, "control", "0") %>% str_replace_all("\\w*-", "") %>% as.numeric()
+replicate_insect_control$tefluthrin$sample <- str_replace_all(replicate_insect_control$tefluthrin$sample, "control", "0") %>% str_replace_all("\\w*-", "") %>% as.numeric()
+replicate_insect_control$thiacloprid$sample <- str_replace_all(replicate_insect_control$thiacloprid$sample, "control", "0") %>% str_replace_all("\\w*-", "") %>% as.numeric()
+
+```
+
+Now the data has the right structure and class I can create some linear models and check if they are a good fit. Cost: decreasing sample size and increasing chance of Type 1 error (false positive, incorrectly rejecting the null hypothesis). 
+
+```{r}
+
+insecticide_linear_models <- list()
+
+model_summaries <- list()
+
+for (insecticide in 1:length(replicate_insect_control)) {
+  
+  insecticide_lm <- lm(auc_l ~ sample, data = replicate_insect_control [[insecticide]]) 
+  
+  insecticide_linear_models [[insecticide]] <- insecticide_lm
+  
+  names(insecticide_linear_models) [[insecticide]] <- names(replicate_insect_control) [[insecticide]] 
+  
+  model_summaries [[insecticide]] <- summary(insecticide_linear_models [[insecticide]])
+  
+  names(model_summaries) [[insecticide]] <- names(replicate_insect_control) [[insecticide]] 
+
+}
+
+ model_summaries
+
+```
+
+Look at the variation by day. This variation was probably introduced by yeast cells not all being in mid-log phase growth, or variation in initial yeast cell number added to each well. 
+
+```{r}
+
+sample_aucl <- sample_aucl %>%
+  reorder_levels(day, order = c("one", "two", "three", "four", "five", "six", "seven", "eight"))
+
+boxplot(auc_l ~ day, data = sample_aucl)
+```
+
