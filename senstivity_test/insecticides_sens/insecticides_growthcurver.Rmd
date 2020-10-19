@@ -218,13 +218,19 @@ When looking at the graph for thiacloprid-5-4 it is apparent it is an outlier.
 # gc_out_filtered <- gc_out %>% filter(note != "cannot fit data") 
 ```
 
-Need to remove outliers through a combination of PCA, sigma values and visual inspection of plots. Removed chlorpyrifos-0.1-7, tefluthrin-0.1-7, control-5-7 (when I knocked the plate and droplet went on lid) and cypermethrin-5-3, cypermethrin-5-6, thiacloprid-5-4, thiacloprid-5-5. 
+Need to remove outliers through a combination of PCA, sigma values and visual inspection of plots. Removed chlorpyrifos-0.1-7, tefluthrin-0.1-7, control-5-7 (when I knocked the plate and droplet went on lid) and cypermethrin-5-3, thiacloprid-5-4, thiacloprid-5-5. 
+
+All the cypermethrin-5 are wrong as well but going to ignore that for now. 
 
 "cypermethrin-5-1", "cypermethrin-5-2", "cypermethrin-5-3", "cypermethrin-5-4", "cypermethrin-5-5", "cypermethrin-5-6", "cypermethrin-5-7", "cypermethrin-5-8"
 
+Also a control is an anomaly but we need it for the ANCOVA so keep it for now
+
 ```{r}
 
-anomalies <- c("chlorpyrifos-0.1-7", "tefluthrin-0.1-7", "control-5-7", "thiacloprid-5-4", "thiacloprid-5-5")
+# put control back into anomalies to see effect , "control-5-7"
+
+anomalies <- c("chlorpyrifos-0.1-7", "tefluthrin-0.1-7", "thiacloprid-5-4", "thiacloprid-5-5")
 
 for (names in anomalies) {
   
@@ -304,7 +310,6 @@ for (insecticide in 1:length(insecticide_list)) {
 
 # top sulfoxaflor concentration was 2.5 not 5
 insecticide_list_1[[8]][5,4] <- as.numeric(gsub(5, 2.5, insecticide_list_1[[8]][5,4]))
-class(insecticide_list_1[[8]][5,4])
 ```
 
 ```{r}
@@ -367,7 +372,7 @@ plot_list
 
 ```
 
-Look at the insecticides one by one. Doesn't make sense to me to convert 10 continuous independent variables into one categorical variable where linear regression would have to be dummy coded in. Contentious point. 
+Best option is to have three independent variables: concentration (continuous independent), pesticide (categorical independent) and day (categorical independent) and one dependent variable: AUC (continuous dependent). AUC = concentation + pesticide + day + (pesticide x concentration) (interaction) + (day x concentration) (interaction).  pesticide x concentration interaction is the interesting term. As I have at least one continuous independent variable and one categorical independent variable I can perform an ANCOVA. 
 
 ```{r}
 
@@ -389,7 +394,7 @@ for (day in 1:length(days)) {
  sample_au <- rbind(sample_au, day_x)
 }
 
-# create a column for the insecticide and control
+# create a column for the insecticide and control (categorical independent variable)
 insecticide_control_name <- c(insecticide_names, "control")
 sample_auc <-  tibble()
 
@@ -410,7 +415,7 @@ sample_auc_control <- str_replace_all(names, "control-.*-\\d$", "control")
 
 sample_auc [ , 1] <- sample_auc_control
 
-# create a column for the concentration, add controls separately
+# create a column for the concentration, add controls separately (continuous independent variable)
 sample_aucl <- tibble()
 
 for (conc in 1:length(concentration)) {
@@ -451,7 +456,11 @@ for (name in 1:length(replicate_name)) {
 }
 
 sample_aucl [, 1] <- replicate_same_names 
+```
 
+If I want to look at the insecticides one by one the below code is useful for splitting the dataset accordingly.
+
+```{r}
 # separate replicates for each insecticide with the control
 insecticide_names <- c("acetamiprid", "chlorpyrifos", "clothianidin", "cypermethrin", "flupyradifurone", "imidacloprid", "malathion", "sulfoxaflor", "tefluthrin", "thiacloprid")
 
@@ -471,9 +480,7 @@ for (name in 1:length(insecticide_names)){
   names(replicate_insect_control) [[name]] <- insecticide_names[name]
 
 }
-```
 
-```{r}
 # convert character names into corresponding numerical concentrations for each insecticide. Obviously need to try and loop this.
 replicate_insect_control$acetamiprid$sample <- str_replace_all(replicate_insect_control$acetamiprid$sample, "control", "0") %>% str_replace_all("\\w*-", "") %>% as.numeric()
 replicate_insect_control$chlorpyrifos$sample <- str_replace_all(replicate_insect_control$chlorpyrifos$sample, "control", "0") %>% str_replace_all("\\w*-", "") %>% as.numeric()
@@ -510,7 +517,7 @@ for (insecticide in 1:length(replicate_insect_control)) {
 
 }
 
- model_summaries
+#model_summaries
 
 ```
 
@@ -523,4 +530,159 @@ sample_aucl <- sample_aucl %>%
 
 boxplot(auc_l ~ day, data = sample_aucl)
 ```
+
+Before going any further I am going to remove cypermethrin and sulfoxaflor from the dataset. The solubility of cypermethrin inflated the optical density measurements and sulfoxaflor only had 5 replicates, all of which with unknown sulfoxaflor concentrations due to evaporation. 
+
+```{r}
+no_cyper_sulfox <- sample_aucl[c(-grep("cypermethrin", sample_aucl$insecticide),-grep("sulfoxaflor", sample_aucl$insecticide)), ]
+```
+
+I need to evenly distribute 40 controls amongst 8 insecticides so that the day effect will be minimised. This requires balanced incomplete block design. In my case I have 8 days (treatments in the examples, g), 8 blocks (insecticides, b), 5 days a block (k) and 5 replicates (r). In this case a BIBD doesn't exist because for 
+
+r.(k-1) = λ.(g-1)
+
+λ isn't a whole number. 
+
+There is, however, a nearly balanced incomplete block design. The first output shows the block design and the second is a concurrence matrix and shows how many times any pair of treatments appears together in the same block. 
+ 
+```{r}
+bibd <- ibd(v = 8, b = 8, k = 5)
+
+bibd$design
+
+#bibd$conc.mat
+```
+
+following the block design above I need to allocate the controls to the insecticides. Remember the use of grep here. As I searched a specific column grep returned a row index, which can they be fed into normal subsetting via indexing. 
+
+```{r}
+only_controls <- no_cyper_sulfox[grep("control", no_cyper_sulfox$insecticide), ]
+
+insecticide_names <- c("acetamiprid", "chlorpyrifos", "clothianidin", "flupyradifurone", "imidacloprid", "malathion", "tefluthrin", "thiacloprid")
+
+# if i remove control again remember to change rep(7, each = 5) to rep(7, each = 4)
+only_controls$day_numerical <- c(rep(c(1:6), each = 5), rep(7, each = 5), rep(8, each = 5))
+
+ancova_df <- no_cyper_sulfox[-grep("control", no_cyper_sulfox$insecticide), ]
+
+# if you run this twice it empties insecticide_names so be careful
+# insecticide_names <- insecticide_names [c(-grep("cypermethrin", insecticide_names), -grep("sulfoxaflor", insecticide_names))]
+
+for (insecticide in 1:length(insecticide_names)) {
+  
+ibd_row <- bibd$design [insecticide, ]
+
+four_controls <- tibble()
+
+for (day in 1:length(ibd_row)) {
+  
+  ibd_day <- only_controls[grep(ibd_row [day], only_controls$day_numerical), ]
+  
+  random_control <- ibd_day[sample(nrow(ibd_day), 1), ]
+  
+  only_controls <- setdiff(only_controls, random_control)
+  
+  four_controls <- rbind(four_controls, random_control)
+  
+}
+
+four_controls$insecticide <- gsub("control", insecticide_names [insecticide], four_controls$insecticide)
+
+ancova_df <- rbind(ancova_df, four_controls [ ,1:5])
+
+}
+
+```
+
+
+```{r}
+only_controls <- sample_aucl[grep("control", sample_aucl$insecticide), ]
+
+# if i remove control again remember to change rep(7, each = 5) to rep(7, each = 4)
+only_controls$day_numerical <- c(rep(c(1:6), each = 5), rep(7, each = 5), rep(8, each = 5))
+
+ancova_df <- sample_aucl[-grep("control", sample_aucl$insecticide), ]
+
+for (insecticide in 1:length(insecticide_names)) {
+  
+ibd_row <- bibd$design [insecticide, ]
+
+four_controls <- tibble()
+
+for (day in 1:length(ibd_row)) {
+  
+  ibd_day <- only_controls[grep(ibd_row [day], only_controls$day_numerical), ]
+  
+  random_control <- ibd_day[sample(nrow(ibd_day), 1), ]
+  
+  only_controls <- setdiff(only_controls, random_control)
+  
+  four_controls <- rbind(four_controls, random_control)
+  
+}
+
+four_controls$insecticide <- gsub("control", insecticide_names [insecticide], four_controls$insecticide)
+
+ancova_df <- rbind(ancova_df, four_controls [ ,1:5])
+
+}
+
+```
+
+Remember that when you run the chunk above you randomly assign the controls to the insecticides again according to the IBD. See if doing this varies the results of the ANCOVA. Would show the control assignment does have an effect. Could do because I'm using a nearly balanced block design.
+
+What are the assumptions of linear regression?
+
+First, build a simpler linear model:
+
+AUC = insecticide + concentration + (insecticide * concentration)
+
+The interesting part of the model is the interaction between insecticide and concentration.
+
+```{r}
+model_1 <- lm(auc_l ~ insecticide + concentration + insecticide*concentration, data = ancova_df)
+
+summary(model_1)
+```
+
+Add in day:
+
+AUC = insecticide + concentration + day + (insecticide * concentration) 
+
+```{r}
+model_2 <- lm(auc_l ~ insecticide + concentration + day + insecticide*concentration, data = ancova_df)
+
+summary(model_2)
+```
+
+These are the only two models that mean anything biologically. Insecticide and concentration only mean something when taken together. Out of interest, when the interaction between all three independent variables is modelled Thiacloprid is no longer significant. Fewer degrees of freedom though. Adjusted R-squared seems alot higher. 
+
+```{r}
+model_3 <- lm(auc_l ~ insecticide + concentration + day + insecticide*concentration*day, data = ancova_df)
+
+summary(model_3)
+```
+
+Separately look at Thiacloprid alone:
+
+lmer(auc_l ~ concentration + (1|day), data = thiacloprid_controls)
+
+Separate just Thiacloprid and all controls. Then, try a mixed model on this dataset.
+
+```{r}
+controls1 <- sample_aucl [grep("^0$", sample_aucl$concentration), ]
+
+thiacloprid <- sample_aucl [grep("thiacloprid", sample_aucl$insecticide), ]
+
+thiacloprid_controls <- rbind(controls1, thiacloprid)
+
+library(lme4)
+
+mixed.thiacloprid <- lmer(auc_l ~ concentration + (1|day), data = thiacloprid_controls)
+
+summary(mixed.thiacloprid)
+```
+
+
+
 
