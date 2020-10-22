@@ -193,8 +193,6 @@ high_sigma
 One additional method for identifying outlier parameters is to conduct a principal components analysis on the samples, which projects high dimensional data on lower dimensional space. Plotting the samples on the first two principal components (PC1 and PC2) can identify natural clusters within the growth curve data as well as outliers.
 
 ```{R, eval = TRUE, message = FALSE}
-
-
 pca_gc_out <- as_data_frame(d_gc) 
 
 # Prepare the gc_out data for the PCA
@@ -227,9 +225,7 @@ All the cypermethrin-5 are wrong as well but going to ignore that for now.
 Also a control is an anomaly but we need it for the ANCOVA so keep it for now
 
 ```{r}
-
 # put control back into anomalies to see effect , "control-5-7"
-
 anomalies <- c("chlorpyrifos-0.1-7", "tefluthrin-0.1-7", "thiacloprid-5-4", "thiacloprid-5-5")
 
 for (names in anomalies) {
@@ -375,7 +371,6 @@ plot_list
 Best option is to have three independent variables: concentration (continuous independent), pesticide (categorical independent) and day (categorical independent) and one dependent variable: AUC (continuous dependent). AUC = concentation + pesticide + day + (pesticide x concentration) (interaction) + (day x concentration) (interaction).  pesticide x concentration interaction is the interesting term. As I have at least one continuous independent variable and one categorical independent variable I can perform an ANCOVA. 
 
 ```{r}
-
 # create a column for the day (categorical independent variable)
 sample_a <- d_gc [ , c(1,9)]
 
@@ -396,6 +391,7 @@ for (day in 1:length(days)) {
 
 # create a column for the insecticide and control (categorical independent variable)
 insecticide_control_name <- c(insecticide_names, "control")
+
 sample_auc <-  tibble()
 
 for (insecticide in 1:length(insecticide_control_name)) {
@@ -492,33 +488,6 @@ replicate_insect_control$malathion$sample <- str_replace_all(replicate_insect_co
 replicate_insect_control$sulfoxaflor$sample <- str_replace_all(replicate_insect_control$sulfoxaflor$sample, "control", "0") %>% str_replace_all("\\w*-", "") %>% as.numeric()
 replicate_insect_control$tefluthrin$sample <- str_replace_all(replicate_insect_control$tefluthrin$sample, "control", "0") %>% str_replace_all("\\w*-", "") %>% as.numeric()
 replicate_insect_control$thiacloprid$sample <- str_replace_all(replicate_insect_control$thiacloprid$sample, "control", "0") %>% str_replace_all("\\w*-", "") %>% as.numeric()
-
-```
-
-Now the data has the right structure and class I can create some linear models and check if they are a good fit. Cost: decreasing sample size and increasing chance of Type 1 error (false positive, incorrectly rejecting the null hypothesis). 
-
-```{r}
-
-insecticide_linear_models <- list()
-
-model_summaries <- list()
-
-for (insecticide in 1:length(replicate_insect_control)) {
-  
-  insecticide_lm <- lm(auc_l ~ sample, data = replicate_insect_control [[insecticide]]) 
-  
-  insecticide_linear_models [[insecticide]] <- insecticide_lm
-  
-  names(insecticide_linear_models) [[insecticide]] <- names(replicate_insect_control) [[insecticide]] 
-  
-  model_summaries [[insecticide]] <- summary(insecticide_linear_models [[insecticide]])
-  
-  names(model_summaries) [[insecticide]] <- names(replicate_insect_control) [[insecticide]] 
-
-}
-
-#model_summaries
-
 ```
 
 Look at the variation by day. This variation was probably introduced by yeast cells not all being in mid-log phase growth, or variation in initial yeast cell number added to each well. 
@@ -543,7 +512,7 @@ r.(k-1) = λ.(g-1)
 
 λ isn't a whole number. 
 
-There is, however, a nearly balanced incomplete block design. The first output shows the block design and the second is a concurrence matrix and shows how many times any pair of treatments appears together in the same block. 
+There is, however, an incomplete block design. The first output shows the block design and the second is a concurrence matrix and shows how many times any pair of treatments appears together in the same block. 
  
 ```{r}
 bibd <- ibd(v = 8, b = 8, k = 5)
@@ -570,66 +539,30 @@ ancova_df <- no_cyper_sulfox[-grep("control", no_cyper_sulfox$insecticide), ]
 
 for (insecticide in 1:length(insecticide_names)) {
   
-ibd_row <- bibd$design [insecticide, ]
+  ibd_row <- bibd$design [insecticide, ]
 
-four_controls <- tibble()
+  four_controls <- tibble()
 
-for (day in 1:length(ibd_row)) {
+  for (day in 1:length(ibd_row)) {
   
-  ibd_day <- only_controls[grep(ibd_row [day], only_controls$day_numerical), ]
+    ibd_day <- only_controls[grep(ibd_row [day], only_controls$day_numerical), ]
   
-  random_control <- ibd_day[sample(nrow(ibd_day), 1), ]
+    random_control <- ibd_day[sample(nrow(ibd_day), 1), ]
   
-  only_controls <- setdiff(only_controls, random_control)
+    only_controls <- setdiff(only_controls, random_control)
   
-  four_controls <- rbind(four_controls, random_control)
+    four_controls <- rbind(four_controls, random_control)
   
 }
 
-four_controls$insecticide <- gsub("control", insecticide_names [insecticide], four_controls$insecticide)
+  four_controls$insecticide <- gsub("control", insecticide_names [insecticide], four_controls$insecticide)
 
-ancova_df <- rbind(ancova_df, four_controls [ ,1:5])
+  ancova_df <- rbind(ancova_df, four_controls [ ,1:5])
 
 }
-
 ```
 
-
-```{r}
-only_controls <- sample_aucl[grep("control", sample_aucl$insecticide), ]
-
-# if i remove control again remember to change rep(7, each = 5) to rep(7, each = 4)
-only_controls$day_numerical <- c(rep(c(1:6), each = 5), rep(7, each = 5), rep(8, each = 5))
-
-ancova_df <- sample_aucl[-grep("control", sample_aucl$insecticide), ]
-
-for (insecticide in 1:length(insecticide_names)) {
-  
-ibd_row <- bibd$design [insecticide, ]
-
-four_controls <- tibble()
-
-for (day in 1:length(ibd_row)) {
-  
-  ibd_day <- only_controls[grep(ibd_row [day], only_controls$day_numerical), ]
-  
-  random_control <- ibd_day[sample(nrow(ibd_day), 1), ]
-  
-  only_controls <- setdiff(only_controls, random_control)
-  
-  four_controls <- rbind(four_controls, random_control)
-  
-}
-
-four_controls$insecticide <- gsub("control", insecticide_names [insecticide], four_controls$insecticide)
-
-ancova_df <- rbind(ancova_df, four_controls [ ,1:5])
-
-}
-
-```
-
-Remember that when you run the chunk above you randomly assign the controls to the insecticides again according to the IBD. See if doing this varies the results of the ANCOVA. Would show the control assignment does have an effect. Could do because I'm using a nearly balanced block design.
+Remember that when you run the chunk above you randomly assign the controls to the insecticides again according to the IBD. See if doing this varies the results. Would show the control assignment does have an effect. Could do because I'm using an incomplete block design.
 
 What are the assumptions of linear regression?
 
@@ -655,13 +588,30 @@ model_2 <- lm(auc_l ~ insecticide + concentration + day + insecticide*concentrat
 summary(model_2)
 ```
 
-These are the only two models that mean anything biologically. Insecticide and concentration only mean something when taken together. Out of interest, when the interaction between all three independent variables is modelled Thiacloprid is no longer significant. Fewer degrees of freedom though. Adjusted R-squared seems alot higher. 
+These are the only two models that mean anything biologically. Insecticide and concentration only mean something when taken together. I'm not doing an ANCOVA because that is to test for significance between an independent categorical variables and dependent continuous variables, controlling for an independent continuous variable. I am not controlling for this variable. Rather I am interested in the interaction between the one independent categorical variable (insecticide) and the independent continuous variable (concentration) and if that interaction is significantly association with the response variable. 
 
 ```{r}
-model_3 <- lm(auc_l ~ insecticide + concentration + day + insecticide*concentration*day, data = ancova_df)
+library(ggpubr)
+library(rstatix)
+library(broom)
 
-summary(model_3)
+# Fit the model, the covariate goes first
+model_2 <- lm(auc_l ~ insecticide + concentration + day + insecticide*concentration, data = ancova_df)
+# Inspect the model diagnostic metrics
+model.metrics <- augment(model_2) %>%
+  select(-.hat, -.sigma, -.fitted) # Remove details
+
+shapiro_test(model.metrics$.resid)
 ```
+
+My residuals aren't normally distributed. Violates assumption of linear regression. Have to transform my data in some manner. Plot the residuals to get an idea of their distribution and the transformation necessary. 
+
+Before that, plot individual replicates by day for each insecticide with a line connecting them. Sample with replacement for controls so all 8 insecticides can be visualised. 
+
+
+
+
+Below use as the basis for a mixed model for the whole dataset if I end up doing one. Not sure as data is normally distributed.
 
 Separately look at Thiacloprid alone:
 
@@ -682,7 +632,3 @@ mixed.thiacloprid <- lmer(auc_l ~ concentration + (1|day), data = thiacloprid_co
 
 summary(mixed.thiacloprid)
 ```
-
-
-
-
