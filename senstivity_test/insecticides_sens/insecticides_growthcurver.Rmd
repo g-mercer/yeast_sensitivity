@@ -154,7 +154,6 @@ for (col_name in names(sens_data_corr)) {
     n <- n + 1
     
     # Finally, plot the raw data and the fitted curve
-    # Here, I'll just print some of the data points to keep the file size smaller
     n_obs <- length(gc_fit$data$t)
     plot(gc_fit$data$t, gc_fit$data$N, 
          pch = 20, 
@@ -214,6 +213,9 @@ When looking at the graph for thiacloprid-5-4 it is apparent it is an outlier.
 ```{r}
 # useful command for filtering column contents
 # gc_out_filtered <- gc_out %>% filter(note != "cannot fit data") 
+
+# save a complete version of the data with all the outliers
+growthcurver_data <- d_gc
 ```
 
 Need to remove outliers through a combination of PCA, sigma values and visual inspection of plots. Removed chlorpyrifos-0.1-7, tefluthrin-0.1-7, control-5-7 (when I knocked the plate and droplet went on lid) and cypermethrin-5-3, thiacloprid-5-4, thiacloprid-5-5. 
@@ -606,7 +608,266 @@ shapiro_test(model.metrics$.resid)
 
 My residuals aren't normally distributed. Violates assumption of linear regression. Have to transform my data in some manner. Plot the residuals to get an idea of their distribution and the transformation necessary. 
 
-Before that, plot individual replicates by day for each insecticide with a line connecting them. Sample with replacement for controls so all 8 insecticides can be visualised. 
+Before that, plot individual replicates by day for each insecticide with a line connecting them. Sample with replacement for controls so all 8 insecticides can be visualised. Have to start with d_gc_complete because require previously filtered anomalies. Create a formatting function. 
+
+```{r}
+
+aucl_formatting_function <- function(growthcurver_data) {
+  
+  # subset from growthcurver_data the two required columns
+  sample_area <- growthcurver_data [, c(1, 9)]
+  
+  # remove sulfoxaflor and cypermethrin
+  sample_area <- sample_area [-grep(pattern = "(cypermethrin|sulfoxaflor)", x = sample_area$sample), ]
+  
+  # add insecticide column to sample_area
+  
+  # create vector with remaining insecticides
+  eight_insecticides <- c("acetamiprid", "chlorpyrifos", "clothianidin", "flupyradifurone", "imidacloprid", "malathion", "tefluthrin", "thiacloprid", "control")
+  
+  # create a df to save loop output in 
+  sample_area_insecticide <- tibble()
+  
+  # extract individual insecticides, add insecticide column and recombine
+  for (insecticide in 1:length(eight_insecticides)) {
+    
+    insecticide_alone <-  sample_area [grep(pattern = eight_insecticides [insecticide], x = sample_area$sample), ]
+    
+    insecticide_alone$insecticide <- eight_insecticides [insecticide]
+    
+    sample_area_insecticide <- rbind(sample_area_insecticide, insecticide_alone)
+    
+  }
+  
+  # add day to sample_area_insecticide
+  
+  # create day
+  days <- c("one", "two", "three", "four", "five", "six", "seven", "eight")
+  
+  # create a df to save loop output in 
+  sample_area_insecticide_day <- tibble()
+  
+  # extract individuals days, add day column and combine
+  for (day in 1:length(days)) {
+    
+    day_pattern <- paste(".+-", day, "$", sep = "")
+    
+    day_alone <- sample_area_insecticide [grep(pattern = day_pattern, x = sample_area_insecticide$sample), ]
+    
+    day_alone$day <- days [day]
+    
+    sample_area_insecticide_day <- rbind(sample_area_insecticide_day, day_alone)
+    
+  }
+  
+  # add concentration to sample_area_insecticide_day
+  
+  # create concentration vector
+  concentration_vector <- c(0.001, 0.01, 0.1, 1, 5)
+  
+  # create a df to save loop output in 
+  sample_area_insecticide_day_concentration <- tibble()
+  
+  # extract individuals concentrations, add concentrations column and combine
+  for (concentration in 1:length(concentration_vector)) {
+    
+    concentration_pattern <- paste(".+-", concentration_vector [concentration], "-.", sep = "")
+    
+    concentration_alone <- sample_area_insecticide_day [grep(pattern = concentration_pattern, x = sample_area_insecticide_day$sample), ]
+    
+    concentration_alone$concentration <- concentration_vector [concentration]
+    
+    sample_area_insecticide_day_concentration <- rbind(sample_area_insecticide_day_concentration, concentration_alone)
+  }
+
+  # extract controls
+  controls_alone <- sample_area_insecticide_day_concentration [grep(pattern = "control", x = sample_area_insecticide_day_concentration$sample), ]
+  
+  # set correct sample name
+  controls_alone$sample <- "control"
+  
+  # set correct concentration
+  controls_alone$concentration <- 0
+  
+  # remove control rows from sample_area_insecticide_day_concentration
+  sample_area_insecticide_day_concentration <- sample_area_insecticide_day_concentration [-grep(pattern = "control", x = sample_area_insecticide_day_concentration$sample), ]
+  
+  # add new control rows to sample_area_insecticide_day_concentration
+  formatted_growthcurver_df <- rbind(sample_area_insecticide_day_concentration, controls_alone)
+  
+  return(formatted_growthcurver_df)
+
+}
+
+formatted_growthcurver_df <- aucl_formatting_function(growthcurver_data)
+
+```
+
+Using this formatted df create plots of individual replicates for each insecticide. Assign controls randomly to insecticide by day with replacement. 
+
+```{r}
+
+insecticides_assigned_controls <- function(formatted_growthcurver_df) {
+  
+  # separate controls
+  controls_alone <- formatted_growthcurver_df [grep(pattern = "control" , x = formatted_growthcurver_df$sample), ]
+
+  # split controls into a list by day
+
+  # create day
+  days <- c("one", "two", "three", "four", "five", "six", "seven", "eight")
+  
+  # create day list
+  control_day_list <- list()
+  
+  for (day in 1:length(days)) {
+      
+      control_by_day <- controls_alone [grep(pattern = days [day], x = controls_alone$day), ]
+      
+      control_day_list [[day]] <- control_by_day
+      
+  }
+  
+  # for each insecticide assign a random control from each day
+  
+  # create vector with remaining insecticides
+  eight_insecticides <- c("acetamiprid", "chlorpyrifos", "clothianidin", "flupyradifurone", "imidacloprid", "malathion", "tefluthrin", "thiacloprid")
+  
+  # create empty df to store new data in
+  controls_labelled_zero_insecticide <- tibble()
+  
+  for (insecticide in 1:length(eight_insecticides)) {
+    
+    insecticide_alone <-  formatted_growthcurver_df [grep(pattern = eight_insecticides [insecticide], x = formatted_growthcurver_df$sample), ]
+    
+    # create dataframe to save eight random controls, one from each day, in
+    eight_random_controls <- tibble() 
+    
+    for (day in 1:length(days)) {
+      
+      random_control <- control_day_list [[day]] [sample(nrow(control_day_list [[day]]), 1, replace = TRUE, prob = NULL), ]
+      
+      eight_random_controls <- rbind(eight_random_controls, random_control)
+    }
+    
+    eight_random_controls$insecticide <-  eight_insecticides [insecticide]
+    
+    insecticide_and_controls <- rbind(insecticide_alone, eight_random_controls)
+    
+    controls_labelled_zero_insecticide <- rbind(controls_labelled_zero_insecticide, insecticide_and_controls)
+    
+  }
+  
+  return(controls_labelled_zero_insecticide)
+}
+
+assigned_controls_df <- insecticides_assigned_controls(formatted_growthcurver_df)
+
+```
+
+Use assigned_controls_df to plot replicate by day for each insecticide. Recycle plot code from above where possible
+
+```{r}
+line_plot_function <- function(assigned_controls_df) {
+  
+  # split assigned_controls_df into 8 lists by insecticide. Also split each insecticide by day. 
+
+  # define 8 insecticides
+  eight_insecticides <- c("acetamiprid", "chlorpyrifos", "clothianidin", "flupyradifurone", "imidacloprid", "malathion", "tefluthrin", "thiacloprid")
+  
+  # create list to save loop output
+  insecticide_list <- list()
+  
+  # split insecticides into their own dfs within a list
+  for (insecticide in 1:length(eight_insecticides)) {
+    
+    insecticide_alone <- assigned_controls_df [grep(pattern = eight_insecticides [insecticide], x = assigned_controls_df$insecticide), ]
+    
+    # create days vector
+    days <- c("one", "two", "three", "four", "five", "six", "seven", "eight")
+    
+    # create new list to save lists
+    insecticide_by_day_list <- list()
+    
+    for (day in 1:length(days)) {
+      
+      by_day <- insecticide_alone [grep(pattern = days [day], x = insecticide_alone$day), ]
+      
+      insecticide_by_day_list [[day]] <- by_day
+      
+      names(insecticide_by_day_list) [[day]] <- days [day]
+      
+    }
+    
+    insecticide_list [[insecticide]] <- insecticide_by_day_list
+    
+    names(insecticide_list) [[insecticide]] <- eight_insecticides [insecticide]
+  }
+  
+  return(insecticide_list)
+  
+}
+
+line_plot_list <- line_plot_function(assigned_controls_df)
+```
+
+
+
+
+
+
+
+
+
+
+
+require(scales)
+
+plot_list <- list()
+
+for (insecticide in 1:length(insecticide_list_2)) {
+  
+  title <- paste0(names(insecticide_list_2[insecticide]), " dose-response curve", sep = "" )
+  
+  df <- insecticide_list_2[[insecticide]]
+
+  df$facet <- ifelse(df$concentration == min(df$concentration), 1, 2)
+  
+  drc <- ggplot(df, aes(x=concentration,y=mean)) +
+    geom_point(data = subset(df, facet == 1)) +
+    geom_point(data = subset(df, facet == 2)) +
+    scale_x_log10(breaks = c(0.0001, 10^(-3:10)), 
+                labels = c(0, math_format()(-3:10))) +
+    geom_errorbar(aes(ymin=mean-CI.mean.0.95, ymax=mean+CI.mean.0.95), width=.1) + 
+    ylim(0, NA) +
+    ggtitle(title) +
+    labs(x="Concentration (log scale)", y="AUC",size=1) +
+    facet_grid(~facet, scales = 'free', space = 'free') +
+    theme(panel.background = element_rect(fill = "white"), plot.margin = margin(1, 1, 1, 1, "cm"),
+    axis.line = element_line(), strip.text.x = element_blank(), plot.background = element_rect(
+      fill = "grey90",
+      colour = "black",
+      size = 1
+  )
+  )
+  
+  plot_list [[insecticide]] <- drc
+
+}
+
+plot_list
+
+```
+
+
+
+
+
+
+
+
+
+
 
 
 
