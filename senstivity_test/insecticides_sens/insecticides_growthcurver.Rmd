@@ -36,7 +36,6 @@ I combined all the replicates using zsh to output a formatted, compiled csv file
 cd /Users/guy/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/insecticides_sens
 
 ./WHATIDID.sh 
-
 ```
 
 ```{r, include = FALSE}
@@ -47,7 +46,9 @@ library(pastecs)
 library(ibd)
 library(rstatix)
 ``` 
+
 ```{r, include = TRUE}
+# display loaded R packages
 r_packages <- installed.packages()[names(sessionInfo()$otherPkgs), "Version"]
 
 r_packages_df <- as.data.frame(r_packages)
@@ -62,9 +63,11 @@ get data in right format, one column per well, one time column and one blank col
 ```{r, include = FALSE}
 # set wd
 setwd("~/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/insecticides_sens/")
+
 # read csv
 insect_sens <- read.csv(file = "./results/form_comp_corr_blank_cont.csv", header = FALSE, stringsAsFactors = FALSE)
 
+# formatting function
 sens_data_form <- function(sens_data) {
   # transpose
   sens_data_trans <- t(sens_data)
@@ -82,17 +85,14 @@ sens_data_form <- function(sens_data) {
   })
   # convert to data frame
   sens_data_corr <- as.data.frame(sens_data_df)
+  
+  return(sens_data_corr)
 }
 
 sens_data_corr <- sens_data_form(insect_sens)
 
 # set any negative values to 0
 sens_data_corr[sens_data_corr<0] <- 0
-```
-
-```{r}
-# useful command for filtering column contents
-# gc_out_filtered <- gc_out %>% filter(note != "cannot fit data") 
 ```
 
 Now the data is in the right format use Growthcurver. To retrieve r_se and r_p as well as the other summary information columns have to be looped through individually.
@@ -118,7 +118,6 @@ d_gc <- data.frame(sample = character(num_analyses),
 # Now, loop through all of the columns in the data frame. For each column,
 # run Growthcurver, save the most useful metrics in the output data frame,
 # and make a plot of all the growth curve data and their best fits.
-
 par(mfcol = c(8,12))
 par(mar = c(0.25,0.25,0.25,0.25))
 y_lim_max <- max(sens_data_corr[,setdiff(names(sens_data_corr), "time")]) - min(sens_data_corr[,setdiff(names(sens_data_corr), "time")])
@@ -172,11 +171,10 @@ for (col_name in names(sens_data_corr)) {
 Sigma values represent the residual sum of squares from the fit of the logistic curve to the data, so larger values mean poorer fits.
 
 ```{R, eval = TRUE, message = FALSE}
-d_gc <- as_data_frame(d_gc)
+d_gc <- as_tibble(d_gc)
 
 # Plot a histogram of the sigma values in order to check for outliers
 hist(d_gc$sigma, main = "Histogram of sigma values", xlab = "sigma")
-
 ```
 
 Are my outliers high insecticide concentrations? Cypermethrin-5 had solubility issues, which resulted in the curve starting with artificially high OD readings. 7/8 Cypermethrin-5 are in the top 50 sigma scores. Not really surprising. 
@@ -201,30 +199,23 @@ rownames(pca_gc_out) <- pca_gc_out$sample
 pca.res <- prcomp(pca_gc_out %>% select(k:sigma), center=TRUE, scale=TRUE)
 
 # Plot the results
-as_data_frame(list(PC1=pca.res$x[,1],
+as_tibble(list(PC1=pca.res$x[,1],
                    PC2=pca.res$x[,2],
                    samples = rownames(pca_gc_out))) %>% 
   ggplot(aes(x=PC1,y=PC2, label=samples)) + 
-  geom_text(size = 2)
+geom_text(size = 2)
 ```
 
 When looking at the graph for thiacloprid-5-4 it is apparent it is an outlier.  
 
 ```{r}
-# useful command for filtering column contents
-# gc_out_filtered <- gc_out %>% filter(note != "cannot fit data") 
-
 # save a complete version of the data with all the outliers
 growthcurver_data <- d_gc
 ```
 
 Need to remove outliers through a combination of PCA, sigma values and visual inspection of plots. Removed chlorpyrifos-0.1-7, tefluthrin-0.1-7, control-5-7 (when I knocked the plate and droplet went on lid) and cypermethrin-5-3, thiacloprid-5-4, thiacloprid-5-5. 
 
-All the cypermethrin-5 are wrong as well but going to ignore that for now. 
-
-"cypermethrin-5-1", "cypermethrin-5-2", "cypermethrin-5-3", "cypermethrin-5-4", "cypermethrin-5-5", "cypermethrin-5-6", "cypermethrin-5-7", "cypermethrin-5-8"
-
-Also a control is an anomaly but we need it for the ANCOVA so keep it for now
+Also a control is an anomaly but we need it for model (and associated incomplete block design) so keep it for now.
 
 ```{r}
 # put control back into anomalies to see effect , "control-5-7"
@@ -235,12 +226,13 @@ for (names in anomalies) {
   d_gc <- d_gc %>% filter(sample != names)
   
 }
-
 ```
 
-Then, take AUC and r for remaining wells and calculate averages for each condition over the remaining replicates. How to incorporate standard error for individual r values in average r values? 
+Then, take AUC and r for remaining wells and calculate averages for each condition over the remaining replicates. How to incorporate standard error for individual r values in average r values? Then plot this onto a dose response curve (semi logarithmic). Is there any effect? Does r and AUC decrease with increasing pesticide concentration? Or no effect? Or unexpected effect, which might suggest incorrect experimental design (inaccurate initial cell number, solubility of cypermethrin, not all in mid-log phase growth at the beginning) 
 
 ```{r}
+mean_plots_function <- function(d_gc) {
+  
 conditions_separately <- list()
 conditions_stats <- tibble()
 
@@ -268,11 +260,6 @@ for (name in 1:length(conditions)) {
 
 colnames(conditions_stats) <- c("condition", "nbr.val", "nbr.null", "nbr.na", "min", "max", "range", "sum", "median", "mean", "SE.mean", "CI.mean.0.95", "var", "std.dev", "coef.var")
 
-```
-
-Then plot this onto a dose response curve (semi logarithmic). Is there any effect? Does r and AUC decrease with increasing pesticide concentration? Or no effect? Or unexpected effect, which might suggest incorrect experimental design (inaccurate initial cell number, solubility of cypermethrin, not all in mid-log phase growth at the beginning)
-
-```{r}
 # pull out condition AUC mean and AUC mean CI 95%
 rel_conditions_stats <- conditions_stats [ , c(1, 10, 12)]
 
@@ -290,6 +277,7 @@ for (name in 1:length(insecticide_names)) {
   insecticide_list [[name]]  <- insecticide_x
   
   names(insecticide_list) [[name]] <- insecticide_names[name]
+  
 }
 
 insecticide_list_1 <- list()
@@ -298,40 +286,36 @@ concentration <- c(0.001, 0.01, 0.1, 1, 5)
 
 for (insecticide in 1:length(insecticide_list)) {
   
-   insecticide_concs <- cbind(insecticide_list [[insecticide]], concentration)
+  insecticide_concs <- cbind(insecticide_list [[insecticide]], concentration)
   
-   insecticide_list_1 [[insecticide]]  <- insecticide_concs
+  insecticide_list_1 [[insecticide]]  <- insecticide_concs
    
-   names(insecticide_list_1) [[insecticide]] <- insecticide_names[insecticide]
+  names(insecticide_list_1) [[insecticide]] <- insecticide_names[insecticide]
 
 }
 
 # top sulfoxaflor concentration was 2.5 not 5
 insecticide_list_1[[8]][5,4] <- as.numeric(gsub(5, 2.5, insecticide_list_1[[8]][5,4]))
-```
 
-```{r}
-  # make control row
-  control_stats <- rel_conditions_stats %>% filter(str_detect(condition, "control"))
-  control_conc <- 0.0001
-  control_row <- cbind(control_stats, control_conc)
-  colnames(control_row) <- colnames(insecticide_list_1[[1]])
-  
-  # bind it to the other insecticide dataframes
-  insecticide_list_2 <- list()
+# make control row
+control_stats <- rel_conditions_stats %>% filter(str_detect(condition, "control"))
+control_conc <- 0.0001
+control_row <- cbind(control_stats, control_conc)
+colnames(control_row) <- colnames(insecticide_list_1[[1]])
+
+# bind it to the other insecticide dataframes
+insecticide_list_2 <- list()
 
 for (insecticide in 1:length(insecticide_list_1)) {
   
-   insecticide_control <- rbind(insecticide_list_1 [[insecticide]], control_row)
+  insecticide_control <- rbind(insecticide_list_1 [[insecticide]], control_row)
   
-   insecticide_list_2 [[insecticide]]  <- insecticide_control
+  insecticide_list_2 [[insecticide]]  <- insecticide_control
    
-   names(insecticide_list_2) [[insecticide]] <- insecticide_names[insecticide]
+  names(insecticide_list_2) [[insecticide]] <- insecticide_names[insecticide]
 
 }
-```
 
-```{r}
 require(scales)
 
 plot_list <- list()
@@ -366,263 +350,22 @@ for (insecticide in 1:length(insecticide_list_2)) {
 
 }
 
-plot_list
-
-```
-
-Best option is to have three independent variables: concentration (continuous independent), pesticide (categorical independent) and day (categorical independent) and one dependent variable: AUC (continuous dependent). AUC = concentation + pesticide + day + (pesticide x concentration) (interaction) + (day x concentration) (interaction).  pesticide x concentration interaction is the interesting term. As I have at least one continuous independent variable and one categorical independent variable I can perform an ANCOVA. 
-
-```{r}
-# create a column for the day (categorical independent variable)
-sample_a <- d_gc [ , c(1,9)]
-
-days <- c("one", "two", "three", "four", "five", "six", "seven", "eight")
-
-sample_au <-  tibble()
-
-for (day in 1:length(days)) {
-  
-  day_pattern <- paste0("\\w*-.*-", day, sep = "")
-  
-  day_x <- sample_a %>% filter(str_detect(sample, day_pattern))
-  
-  day_x$day <- days [day]
-  
- sample_au <- rbind(sample_au, day_x)
-}
-
-# create a column for the insecticide and control (categorical independent variable)
-insecticide_control_name <- c(insecticide_names, "control")
-
-sample_auc <-  tibble()
-
-for (insecticide in 1:length(insecticide_control_name)) {
-  
-  by_insecticide <- sample_au %>% filter(str_detect(sample, insecticide_control_name [insecticide]))
-  
-  by_insecticide$insecticide <- insecticide_control_name [insecticide]
-  
-  sample_auc <- rbind(sample_auc, by_insecticide)
+return(plot_list)
 
 }
 
-# give controls same name
-names <- sample_auc$sample
+mean_plots <- mean_plots_function(d_gc)
 
-sample_auc_control <- str_replace_all(names, "control-.*-\\d$", "control")
-
-sample_auc [ , 1] <- sample_auc_control
-
-# create a column for the concentration, add controls separately (continuous independent variable)
-sample_aucl <- tibble()
-
-for (conc in 1:length(concentration)) {
-  
-  indiv_conc <- paste0("\\w*-", concentration [conc], "-", sep = "")
-  
-  by_concentration <- sample_auc %>% filter(str_detect(sample, indiv_conc))
-  
-  by_concentration$concentration <- concentration [conc]
-  
-  sample_aucl <- rbind(sample_aucl, by_concentration)
-  
-}
-
-controls_sep <- sample_auc %>% filter(str_detect(sample, "control"))
-
-controls_sep$concentration <- 0
-
-sample_aucl <- rbind(sample_aucl, controls_sep)
-
-# give replicates same name for each group.
-names <- sample_aucl$sample
-
-sample_aucl_control <- str_replace_all(names, "control-.*-\\d$", "control")
-
-sample_aucl [ , 1] <- sample_aucl_control
-
-replicate_name <- sample_aucl$sample
-
-replicate_same_names <- tibble()
-
-for (name in 1:length(replicate_name)) {
-  
-  same_name <- str_replace_all(sample_aucl [name, 1], "-\\d$", "")
-
-  replicate_same_names [name, 1] <- same_name
-    
-}
-
-sample_aucl [, 1] <- replicate_same_names 
+mean_plots
 ```
 
-If I want to look at the insecticides one by one the below code is useful for splitting the dataset accordingly.
+Best option is to have three independent variables: concentration (continuous independent), pesticide (categorical independent) and day (categorical independent) and one dependent variable: AUC (continuous dependent). AUC = concentation + pesticide + day + (pesticide x concentration) (interaction) + (day x concentration) (interaction).  pesticide x concentration interaction is the interesting term. To do this the data has to be reformatted so there are columns with concentration, day and insecticide. At this point sulfoxaflor and cypermethrin were removed due to evaporation and solubility issues respectively. 
 
 ```{r}
-# separate replicates for each insecticide with the control
-insecticide_names <- c("acetamiprid", "chlorpyrifos", "clothianidin", "cypermethrin", "flupyradifurone", "imidacloprid", "malathion", "sulfoxaflor", "tefluthrin", "thiacloprid")
-
-# make control rows
-controls <- sample_aucl %>% filter(str_detect(sample, "control"))
-
-replicate_insect_control <- list()
-
-for (name in 1:length(insecticide_names)){
-  
-  insecticide_x <- sample_aucl %>% filter(str_detect(sample, insecticide_names[name]))
-  
-  insecticide_x_control <- rbind(insecticide_x, controls)
-
-  replicate_insect_control [[name]]  <- insecticide_x_control
-  
-  names(replicate_insect_control) [[name]] <- insecticide_names[name]
-
-}
-
-# convert character names into corresponding numerical concentrations for each insecticide. Obviously need to try and loop this.
-replicate_insect_control$acetamiprid$sample <- str_replace_all(replicate_insect_control$acetamiprid$sample, "control", "0") %>% str_replace_all("\\w*-", "") %>% as.numeric()
-replicate_insect_control$chlorpyrifos$sample <- str_replace_all(replicate_insect_control$chlorpyrifos$sample, "control", "0") %>% str_replace_all("\\w*-", "") %>% as.numeric()
-replicate_insect_control$clothianidin$sample <- str_replace_all(replicate_insect_control$clothianidin$sample, "control", "0") %>% str_replace_all("\\w*-", "") %>% as.numeric()
-replicate_insect_control$cypermethrin$sample <- str_replace_all(replicate_insect_control$cypermethrin$sample, "control", "0") %>% str_replace_all("\\w*-", "") %>% as.numeric()
-replicate_insect_control$flupyradifurone$sample <- str_replace_all(replicate_insect_control$flupyradifurone$sample, "control", "0") %>% str_replace_all("\\w*-", "") %>% as.numeric()
-replicate_insect_control$imidacloprid$sample <- str_replace_all(replicate_insect_control$imidacloprid$sample, "control", "0") %>% str_replace_all("\\w*-", "") %>% as.numeric()
-replicate_insect_control$malathion$sample <- str_replace_all(replicate_insect_control$malathion$sample, "control", "0") %>% str_replace_all("\\w*-", "") %>% as.numeric()
-replicate_insect_control$sulfoxaflor$sample <- str_replace_all(replicate_insect_control$sulfoxaflor$sample, "control", "0") %>% str_replace_all("\\w*-", "") %>% as.numeric()
-replicate_insect_control$tefluthrin$sample <- str_replace_all(replicate_insect_control$tefluthrin$sample, "control", "0") %>% str_replace_all("\\w*-", "") %>% as.numeric()
-replicate_insect_control$thiacloprid$sample <- str_replace_all(replicate_insect_control$thiacloprid$sample, "control", "0") %>% str_replace_all("\\w*-", "") %>% as.numeric()
-```
-
-Look at the variation by day. This variation was probably introduced by yeast cells not all being in mid-log phase growth, or variation in initial yeast cell number added to each well. 
-
-```{r}
-
-sample_aucl <- sample_aucl %>%
-  reorder_levels(day, order = c("one", "two", "three", "four", "five", "six", "seven", "eight"))
-
-boxplot(auc_l ~ day, data = sample_aucl)
-```
-
-Before going any further I am going to remove cypermethrin and sulfoxaflor from the dataset. The solubility of cypermethrin inflated the optical density measurements and sulfoxaflor only had 5 replicates, all of which with unknown sulfoxaflor concentrations due to evaporation. 
-
-```{r}
-no_cyper_sulfox <- sample_aucl[c(-grep("cypermethrin", sample_aucl$insecticide),-grep("sulfoxaflor", sample_aucl$insecticide)), ]
-```
-
-I need to evenly distribute 40 controls amongst 8 insecticides so that the day effect will be minimised. This requires balanced incomplete block design. In my case I have 8 days (treatments in the examples, g), 8 blocks (insecticides, b), 5 days a block (k) and 5 replicates (r). In this case a BIBD doesn't exist because for 
-
-r.(k-1) = λ.(g-1)
-
-λ isn't a whole number. 
-
-There is, however, an incomplete block design. The first output shows the block design and the second is a concurrence matrix and shows how many times any pair of treatments appears together in the same block. 
- 
-```{r}
-bibd <- ibd(v = 8, b = 8, k = 5)
-
-bibd$design
-
-#bibd$conc.mat
-```
-
-following the block design above I need to allocate the controls to the insecticides. Remember the use of grep here. As I searched a specific column grep returned a row index, which can they be fed into normal subsetting via indexing. 
-
-```{r}
-only_controls <- no_cyper_sulfox[grep("control", no_cyper_sulfox$insecticide), ]
-
-insecticide_names <- c("acetamiprid", "chlorpyrifos", "clothianidin", "flupyradifurone", "imidacloprid", "malathion", "tefluthrin", "thiacloprid")
-
-# if i remove control again remember to change rep(7, each = 5) to rep(7, each = 4)
-only_controls$day_numerical <- c(rep(c(1:6), each = 5), rep(7, each = 5), rep(8, each = 5))
-
-ancova_df <- no_cyper_sulfox[-grep("control", no_cyper_sulfox$insecticide), ]
-
-# if you run this twice it empties insecticide_names so be careful
-# insecticide_names <- insecticide_names [c(-grep("cypermethrin", insecticide_names), -grep("sulfoxaflor", insecticide_names))]
-
-for (insecticide in 1:length(insecticide_names)) {
-  
-  ibd_row <- bibd$design [insecticide, ]
-
-  four_controls <- tibble()
-
-  for (day in 1:length(ibd_row)) {
-  
-    ibd_day <- only_controls[grep(ibd_row [day], only_controls$day_numerical), ]
-  
-    random_control <- ibd_day[sample(nrow(ibd_day), 1), ]
-  
-    only_controls <- setdiff(only_controls, random_control)
-  
-    four_controls <- rbind(four_controls, random_control)
-  
-}
-
-  four_controls$insecticide <- gsub("control", insecticide_names [insecticide], four_controls$insecticide)
-
-  ancova_df <- rbind(ancova_df, four_controls [ ,1:5])
-
-}
-```
-
-Remember that when you run the chunk above you randomly assign the controls to the insecticides again according to the IBD. See if doing this varies the results. Would show the control assignment does have an effect. Could do because I'm using an incomplete block design.
-
-What are the assumptions of linear regression?
-
-First, build a simpler linear model:
-
-AUC = insecticide + concentration + (insecticide * concentration)
-
-The interesting part of the model is the interaction between insecticide and concentration.
-
-```{r}
-model_1 <- lm(auc_l ~ insecticide + concentration + insecticide*concentration, data = ancova_df)
-
-summary(model_1)
-```
-
-Add in day:
-
-AUC = insecticide + concentration + day + (insecticide * concentration) 
-
-```{r}
-model_2 <- lm(auc_l ~ insecticide + concentration + day + insecticide*concentration, data = ancova_df)
-
-summary(model_2)
-```
-
-These are the only two models that mean anything biologically. Insecticide and concentration only mean something when taken together. I'm not doing an ANCOVA because that is to test for significance between an independent categorical variables and dependent continuous variables, controlling for an independent continuous variable. I am not controlling for this variable. Rather I am interested in the interaction between the one independent categorical variable (insecticide) and the independent continuous variable (concentration) and if that interaction is significantly association with the response variable. 
-
-```{r}
-library(ggpubr)
-library(rstatix)
-library(broom)
-
-# Fit the model, the covariate goes first
-model_2 <- lm(auc_l ~ insecticide + concentration + day + insecticide*concentration, data = ancova_df)
-# Inspect the model diagnostic metrics
-model.metrics <- augment(model_2) %>%
-  select(-.hat, -.sigma, -.fitted) # Remove details
-
-shapiro_test(model.metrics$.resid)
-```
-
-My residuals aren't normally distributed. Violates assumption of linear regression. Have to transform my data in some manner. Plot the residuals to get an idea of their distribution and the transformation necessary. 
-
-Plot residuals of model 2
-
-```{r}
-hist(model_2$residuals)
-plot(density(model_2$residuals))
-```
-
-Before that, plot individual replicates by day for each insecticide with a line connecting them. Sample with replacement for controls so all 8 insecticides can be visualised. Have to start with d_gc_complete because require previously filtered anomalies. Create a formatting function. 
-
-```{r}
-
-aucl_formatting_function <- function(growthcurver_data) {
+aucl_formatting_function <- function(growthcurver_data, control_conc, aucl_or_r) {
   
   # subset from growthcurver_data the two required columns
-  sample_area <- growthcurver_data [, c(1, 9)]
+  sample_area <- growthcurver_data [, c(1, aucl_or_r)]
   
   # remove sulfoxaflor and cypermethrin
   sample_area <- sample_area [-grep(pattern = "(cypermethrin|sulfoxaflor)", x = sample_area$sample), ]
@@ -693,8 +436,8 @@ aucl_formatting_function <- function(growthcurver_data) {
   # set correct sample name
   controls_alone$sample <- "control"
   
-  # set correct concentration (for making graphs)
-  controls_alone$concentration <- 0.0001
+  # set correct concentration (0.0001 for making graphs)
+  controls_alone$concentration <- control_conc
   
   # remove control rows from sample_area_insecticide_day_concentration
   sample_area_insecticide_day_concentration <- sample_area_insecticide_day_concentration [-grep(pattern = "control", x = sample_area_insecticide_day_concentration$sample), ]
@@ -706,8 +449,236 @@ aucl_formatting_function <- function(growthcurver_data) {
 
 }
 
-formatted_growthcurver_df <- aucl_formatting_function(growthcurver_data)
+model_df_anomalies_removed <- aucl_formatting_function(growthcurver_data = d_gc, control_conc = 0, aucl_or_r = 9)
+```
 
+Look at the variation by day. This variation was probably introduced by yeast cells not all being in mid-log phase growth, or variation in initial yeast cell number added to each well. 
+
+```{r}
+model_df_anomalies_removed <- model_df_anomalies_removed %>%
+  reorder_levels(day, order = c("one", "two", "three", "four", "five", "six", "seven", "eight"))
+
+boxplot(auc_l ~ day, data = model_df_anomalies_removed)
+```
+
+I need to evenly distribute 40 controls amongst 8 insecticides so that the day effect will be minimised. This requires balanced incomplete block design. In my case I have 8 days (treatments in the examples, g), 8 blocks (insecticides, b), 5 days a block (k) and 5 replicates (r). In this case a BIBD doesn't exist because for 
+
+r.(k-1) = λ.(g-1)
+
+λ isn't a whole number. 
+
+There is, however, an incomplete block design. The first output shows the block design and the second is a concurrence matrix and shows how many times any pair of treatments appears together in the same block. 
+ 
+```{r}
+bibd <- ibd(v = 8, b = 8, k = 5)
+
+bibd$design
+
+# shows how many days each block shares
+bibd$conc.mat
+```
+
+following the block design above I need to allocate the controls to the insecticides. Remember the use of grep here. As I searched a specific column grep returned a row index, which can they be fed into normal subsetting via indexing. 
+
+```{r}
+ibd_control_assignment_function <- function(model_df_anomalies_removed) {
+
+  only_controls <- model_df_anomalies_removed[grep("control", model_df_anomalies_removed$insecticide), ]
+
+  insecticide_names <- c("acetamiprid", "chlorpyrifos", "clothianidin", "flupyradifurone", "imidacloprid", "malathion", "tefluthrin", "thiacloprid")
+
+  # if i remove control again remember to change rep(7, each = 5) to rep(7, each = 4)
+  only_controls$day_numerical <- rep(1:8, times = 5)
+
+  model_df <- model_df_anomalies_removed[-grep("control", model_df_anomalies_removed$insecticide), ]
+
+  for (insecticide in 1:length(insecticide_names)) {
+  
+    ibd_row <- bibd$design [insecticide, ]
+
+    four_controls <- tibble()
+
+    for (day in 1:length(ibd_row)) {
+  
+      ibd_day <- only_controls[grep(ibd_row [day], only_controls$day_numerical), ]
+  
+      random_control <- ibd_day[sample(nrow(ibd_day), 1), ]
+  
+      only_controls <- setdiff(only_controls, random_control)
+  
+      four_controls <- rbind(four_controls, random_control)
+  
+    }
+
+    four_controls$insecticide <- gsub("control", insecticide_names [insecticide], four_controls$insecticide)
+
+    model_df <- rbind(model_df, four_controls [ ,1:5])
+
+  }
+  
+  return(model_df)
+
+}
+
+model_df_assigned_controls <- ibd_control_assignment_function(model_df_anomalies_removed)
+```
+
+Remember that when you run the chunk above you randomly assign the controls to the insecticides again according to the IBD. See if doing this varies the results. Would show the control assignment does have an effect. Could do because I'm using an incomplete block design.
+
+What are the assumptions of linear regression?
+
+First, build a simpler linear model:
+
+AUC = insecticide + concentration + (insecticide * concentration)
+
+The interesting part of the model is the interaction between insecticide and concentration.
+
+```{r}
+model_1 <- lm(auc_l ~ insecticide + concentration + insecticide*concentration, data = model_df_assigned_controls)
+
+summary(model_1)
+```
+
+Add in day:
+
+AUC = insecticide + concentration + day + (insecticide * concentration) 
+
+```{r}
+model_2 <- lm(auc_l ~ insecticide + concentration + day + insecticide*concentration, data = model_df_assigned_controls)
+
+summary(model_2)
+```
+
+These are the only two models that mean anything biologically. Insecticide and concentration only mean something when taken together. I'm not doing an ANCOVA because that is to test for significance between an independent categorical variables and dependent continuous variables, controlling for an independent continuous variable. I am not controlling for this variable. Rather I am interested in the interaction between the one independent categorical variable (insecticide) and the independent continuous variable (concentration) and if that interaction is significantly associated with the response variable. 
+
+```{r}
+library(ggpubr)
+library(rstatix)
+library(broom)
+
+# Fit the model, the covariate goes first
+model_2 <- lm(auc_l ~ insecticide + concentration + day + insecticide*concentration, data = model_df_assigned_controls)
+# Inspect the model diagnostic metrics
+model.metrics <- augment(model_2) %>%
+  select(-.hat, -.sigma, -.fitted) # Remove details
+
+shapiro_test(model.metrics$.resid)
+```
+
+My residuals aren't normally distributed. Violates assumption of linear regression. Have to transform my data in some manner. Plot the residuals to get an idea of their distribution and the transformation necessary. 
+
+Plot histogram and density kernal of residuals for model 2. Gives an 
+
+```{r}
+hist(model_df_assigned_controls$auc_l)
+hist(model_2$residuals)
+plot(density(model_2$residuals))
+plot(model_2)
+```
+
+Data is slightly left skewed. Try all 16 combinations of square root, cube root, log  and untransformed dependent and log, square, cube root and untransformed of independent. All residuals non normal
+
+```{r}
+library(DescTools)
+
+log_conc <- model_df_assigned_controls
+
+# remove the outlier control
+
+# log_conc <-  log_conc [grep(pattern = , x = ), ]
+
+positive_skew_reflection <- 1100-(model_df_assigned_controls$auc_l)
+
+hist(log_conc$auc_l)
+
+hist(positive_skew_reflection)
+
+# positive skew reflection transformation
+
+log_conc$auc_l <- positive_skew_reflection
+
+log_conc$auc_l <- log10(log_conc$auc_l)
+
+# dependent variable transformations
+
+# log_conc$auc_l <- log10(log_conc$auc_l)
+
+# log_conc$auc_l <- sqrt(log_conc$auc_l)
+
+# log_conc$auc_l <- (log_conc$auc_l)^(1/3)
+
+# indepedent variable transformations
+
+# log_conc$concentration <- LogSt(log_conc$concentration, base = 10, calib = log_conc$concentration, threshold = NULL, mult = 1)
+
+# log_conc$concentration <- sqrt(log_conc$concentration)
+
+# log_conc$concentration <- (log_conc$concentration)^(1/3)
+
+model_3 <- lm(auc_l ~ insecticide + concentration + day + insecticide*concentration, data = log_conc)
+
+summary(model_3)
+
+plot(density(model_3$residuals))
+
+# Inspect the model diagnostic metrics
+model.metrics <- augment(model_3) #%>%
+  #select(-.hat, -.sigma, -.fitted) # Remove details
+
+shapiro_test(model.metrics$.resid)
+```
+
+Use fitdistrplus package to identify distribution of auc_l.
+
+```{r}
+library(fitdistrplus)
+
+positive_skew <- 1100-(model_df_assigned_controls$auc_l)
+
+# mirror images of each other. I have reflected the negative skew by subtracting each score from a 
+# constant that is larger than the largest score. Skewness is the same magnitude but in the opposite direction.
+plotdist(model_df_assigned_controls$auc_l, histo = TRUE, demp = TRUE)
+
+descdist(model_df_assigned_controls$auc_l, boot = 1000)
+
+plotdist(positive_skew, histo = TRUE, demp = TRUE)
+
+descdist(positive_skew, boot = 1000)
+
+fit_wb <-  fitdist(positive_skew, "weibull")
+
+summary(fit_wb)
+
+fit_ln <-  fitdist(positive_skew, "lnorm")
+
+summary(fit_ln)
+
+fit_g <-  fitdist(positive_skew, "gamma")
+
+summary(fit_g)
+
+par(mfrow = c(2, 2))
+
+plot.legend <- c("weibull", "lognormal", "gamma")
+
+denscomp(list(fit_wb, fit_ln, fit_g), legendtext = plot.legend)
+
+qqcomp(list(fit_wb, fit_ln, fit_g), legendtext = plot.legend)
+
+cdfcomp(list(fit_wb, fit_ln, fit_g), legendtext = plot.legend)
+ 
+ppcomp(list(fit_wb, fit_ln, fit_g), legendtext = plot.legend)
+
+gofstat(list(fit_wb, fit_ln, fit_g),  fitnames = c("weibull", "lognormal", "gamma"))
+
+```
+
+Looks like gamma is the best fit with the lowest AIC score, and lowest for the other three statistics. What I don't understand is how performing reflection and then log transforming the data didn't work because a lognormal distribution looks like a pretty good approximation apart from the at the distribution tail (QQ-plot). 
+
+Plot individual replicates by day for each insecticide with a line connecting them. Sample with replacement for controls so all 8 insecticides can be visualised. Have to start with growthcurver_data because require previously filtered anomalies.
+
+```{r}
+formatted_growthcurver_df <- aucl_formatting_function(growthcurver_data = growthcurver_data, control_conc = 0.0001, aucl_or_r = 9)
 ```
 
 Using this formatted df create plots of individual replicates for each insecticide. Assign controls randomly to insecticide by day with replacement. 
@@ -772,53 +743,7 @@ assigned_controls_df <- insecticides_assigned_controls(formatted_growthcurver_df
 
 ```
 
-Use assigned_controls_df to plot replicate by day for each insecticide. Recycle plot code from above where possible
-
-```{r}
-line_plot_list_function <- function(assigned_controls_df) {
-  
-  # split assigned_controls_df into 8 lists by insecticide. Also split each insecticide by day. 
-
-  # define 8 insecticides
-  eight_insecticides <- c("acetamiprid", "chlorpyrifos", "clothianidin", "flupyradifurone", "imidacloprid", "malathion", "tefluthrin", "thiacloprid")
-  
-  # create list to save loop output
-  insecticide_list <- list()
-  
-  # split insecticides into their own dfs within a list
-  for (insecticide in 1:length(eight_insecticides)) {
-    
-    insecticide_alone <- assigned_controls_df [grep(pattern = eight_insecticides [insecticide], x = assigned_controls_df$insecticide), ]
-    
-    # create days vector
-    days <- c("one", "two", "three", "four", "five", "six", "seven", "eight")
-    
-    # create new list to save by day dfs
-    insecticide_by_day_list <- list()
-    
-    for (day in 1:length(days)) {
-      
-      by_day <- insecticide_alone [grep(pattern = days [day], x = insecticide_alone$day), ]
-      
-      insecticide_by_day_list [[day]] <- by_day
-      
-      names(insecticide_by_day_list) [[day]] <- days [day]
-      
-    }
-    
-    insecticide_list [[insecticide]] <- insecticide_by_day_list
-    
-    names(insecticide_list) [[insecticide]] <- eight_insecticides [insecticide]
-  }
-  
-  return(insecticide_list)
-  
-}
-
-line_plot_list <- line_plot_list_function(assigned_controls_df)
-```
-
-Think I got a bit loop happy above but don't delete yet as may be useful. 
+Split by insecticide
 
 ```{r}
 by_insecticide_df_function <- function(assigned_controls_df) {
@@ -850,7 +775,7 @@ by_insecticide_dfs <- by_insecticide_df_function(assigned_controls_df)
 
 ```
 
-
+Plot
 
 ```{r}
 require(scales)
@@ -863,6 +788,7 @@ for (insecticide in 1:length(by_insecticide_dfs)) {
   
   df <- by_insecticide_dfs[[insecticide]]
 
+  # introduces axis break.
   df$facet <- ifelse(df$concentration == min(df$concentration), 1, 2)
   
   drc <- ggplot(df, aes(x=concentration,y=auc_l, color=day)) +
@@ -894,8 +820,6 @@ plot_list
 Above I can introduce the axis break but not line connecting all points. Below I can connect all points but not have axis break. 
 
 ```{r}
-require(scales)
-
 plot_list <- list()
 
 for (insecticide in 1:length(by_insecticide_dfs)) {
@@ -925,88 +849,125 @@ for (insecticide in 1:length(by_insecticide_dfs)) {
 }
 
 plot_list
-
-# multiplot(plot_list [[1]], plot_list [[2]], plot_list [[3]], plot_list [[4]], plot_list [[5]], plot_list [[6]], plot_list [[7]], plot_list [[8]], cols=4)
-
 ```
 
+All displayed at once
+
 ```{r}
-# Multiple plot function
-#
-# ggplot objects can be passed in ..., or to plotlist (as a list of ggplot objects)
-# - cols:   Number of columns in layout
-# - layout: A matrix specifying the layout. If present, 'cols' is ignored.
-#
-# If the layout is something like matrix(c(1,2,3,3), nrow=2, byrow=TRUE),
-# then plot 1 will go in the upper left, 2 will go in the upper right, and
-# 3 will go all the way across the bottom.
-#
-multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
-  library(grid)
 
-  # Make a list from the ... arguments and plotlist
-  plots <- c(list(...), plotlist)
+title <- "replicates by day for insecticides"
 
-  numPlots = length(plots)
+drc <- ggplot(assigned_controls_df, aes(x=concentration,y=auc_l, color=day)) +
+  facet_wrap(~ insecticide) +
+  geom_point() +
+  geom_line() +
+  scale_x_log10(breaks = c(0.0001, 10^(-3:10)), 
+                labels = c(0, math_format()(-3:10))) +
+  ylim(0, NA) +
+  ggtitle(title) +
+  labs(x="Concentration (log scale)", y="AUC",size=1) +
+theme(panel.background = element_rect(fill = "white"), plot.margin = margin(1, 1, 1, 1, "cm"),
+  axis.line = element_line(), plot.background = element_rect(
+    fill = "grey90",
+    colour = "black",
+    size = 1
+  )
+  )
 
-  # If layout is NULL, then use 'cols' to determine layout
-  if (is.null(layout)) {
-    # Make the panel
-    # ncol: Number of columns of plots
-    # nrow: Number of rows needed, calculated from # of cols
-    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
-                    ncol = cols, nrow = ceiling(numPlots/cols))
-  }
+ drc
+```
 
- if (numPlots==1) {
-    print(plots[[1]])
+At some point have to transform data. 
 
-  } else {
-    # Set up the page
-    grid.newpage()
-    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+Does looking at growth rate (r) change any of the results. 
 
-    # Make each plot, in the correct location
-    for (i in 1:numPlots) {
-      # Get the i,j matrix positions of the regions that contain this subplot
-      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+```{r}
+model_df_anomalies_removed_r <- aucl_formatting_function(growthcurver_data = d_gc, control_conc = 0, aucl_or_r = 4)
 
-      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
-                                      layout.pos.col = matchidx$col))
-    }
-  }
+model_df_assigned_controls_r <- ibd_control_assignment_function(model_df_anomalies_removed_r)
+
+model_1_r <- lm(r ~ insecticide + concentration + insecticide*concentration, data = model_df_assigned_controls_r)
+
+summary(model_1_r)
+
+model_2_r <- lm(r ~ insecticide + concentration + day + insecticide*concentration, data = model_df_assigned_controls_r)
+
+summary(model_2_r)
+```
+
+model output is the same. Less of the variation described by the model though.
+
+```{r}
+formatted_growthcurver_df_r <- aucl_formatting_function(growthcurver_data = growthcurver_data, control_conc = 0.0001, aucl_or_r = 4)
+
+assigned_controls_df_r <- insecticides_assigned_controls(formatted_growthcurver_df_r)
+
+by_insecticide_dfs_r <- by_insecticide_df_function(assigned_controls_df_r)
+
+plot_list <- list()
+
+for (insecticide in 1:length(by_insecticide_dfs_r)) {
+  
+  title <- paste0(names(by_insecticide_dfs_r[insecticide]), " dose-response curve", sep = "" )
+  
+  df <- by_insecticide_dfs_r[[insecticide]]
+  
+  drc <- ggplot(df, aes(x=concentration,y=r, color=day)) +
+    geom_point() +
+    geom_line() +
+    scale_x_log10(breaks = c(0.0001, 10^(-3:10)), 
+                  labels = c(0, math_format()(-3:10))) +
+    ylim(0, NA) +
+    ggtitle(title) +
+    labs(x="Concentration (log scale)", y="AUC",size=1) +
+    theme(panel.background = element_rect(fill = "white"), plot.margin = margin(1, 1, 1, 1, "cm"),
+          axis.line = element_line(), strip.text.x = element_blank(), plot.background = element_rect(
+            fill = "grey90",
+            colour = "black",
+            size = 1
+          )
+    )
+  
+  plot_list [[insecticide]] <- drc
+  
 }
+
+plot_list
+
 ```
 
+The growth rate (r) plots for include thiacloprid-5-4 and thiacloprid-5-5, which were both anomalies. They were removed from the model. Make the trend look stronger than it is. Reason r was lower for these is OD started higher due to experimental error, so maximal growth rate wasn't detected as OD readings were artificially elevated above the stage where maximal growth occurs. 
 
 
 
 
 
-
-
-
-
-
-
-Below use as the basis for a mixed model for the whole dataset if I end up doing one. Not sure as data is normally distributed.
-
-Separately look at Thiacloprid alone:
-
-lmer(auc_l ~ concentration + (1|day), data = thiacloprid_controls)
-
-Separate just Thiacloprid and all controls. Then, try a mixed model on this dataset.
+Just Thiacloprid
 
 ```{r}
-controls1 <- sample_aucl [grep("^0$", sample_aucl$concentration), ]
+# linear model
+thiacloprid <- model_df_assigned_controls [grep(pattern = "thiacloprid", x = model_df_assigned_controls$insecticide), ]
 
-thiacloprid <- sample_aucl [grep("thiacloprid", sample_aucl$insecticide), ]
+model_4 <- lm(auc_l ~ concentration + day, data = thiacloprid)
 
-thiacloprid_controls <- rbind(controls1, thiacloprid)
+summary(model_4)
 
+plot(model_4)
+
+plot(density(model_4$residuals))
+
+# Inspect the model diagnostic metrics
+model.metrics_thia <- augment(model_4) %>%
+  select(-.hat, -.sigma, -.fitted) # Remove details
+
+shapiro_test(model.metrics_thia$.resid)
+
+# mixed model
 library(lme4)
 
-mixed.thiacloprid <- lmer(auc_l ~ concentration + (1|day), data = thiacloprid_controls)
+thiacloprid_mm <- lmer(auc_l ~ concentration + (1|day), data = thiacloprid)
 
-summary(mixed.thiacloprid)
+summary(thiacloprid_mm)
 ```
+
+Day explains 56.7% of the variance remaining after the variance explained by fixed effects. Intercept and slope comparable between linear and mixed model. 
