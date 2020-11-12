@@ -10,8 +10,8 @@ concentrations <- c(0.001, 0.01, 0.1, 1, 5)
 
 concentrations_for_table <- c()
 for (i in 1:12) {
-  concentrations_for_table <- append( concentrations_for_table, 
-                                     sample( concentrations, size = 5))
+  concentrations_for_table <- append(concentrations_for_table, 
+                                     sample(concentrations, size = 5))
 }
 
 wells$concentrations <- concentrations_for_table
