@@ -25,7 +25,7 @@ for (row in 1:nrow(allocation)) {
   
 }
 
-treatments <- c("control", "solvent", "thiacloprid", "acetamiprid", "imidacloprid", 
+treatments <- c("control", "control_solvent", "thiacloprid", "acetamiprid", "imidacloprid", 
                 "clothianidin", "flupyradifurone", "blank")
 
 colnames(allocation) <- treatments
@@ -68,8 +68,18 @@ for (day in 1:nrow(allocation)) {
   
   rownames(row_layout) <- treatment_vector
   
+  zero_rows <- c("^control$", "^blank$", "^control_solvent$")
+  
+  for (i in 1:length(zero_rows)) {
+    
+    row_layout [grep(pattern = zero_rows [i], x = rownames(row_layout)),] <- 0
+    
+    rownames(row_layout) <- treatment_vector
+    
+  }
+  
   row_layout_day_list [[day]] <- row_layout
-
+  
 }
 
 day_1 <- row_layout_day_list [[1]]
