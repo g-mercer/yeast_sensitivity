@@ -202,7 +202,6 @@ hist(d_gc$sigma, main = "Histogram of sigma values", xlab = "sigma")
 high_sigma <- d_gc %>% top_n(50, sigma) %>% arrange(desc(sigma))
 ```
 
-
 One additional method for identifying outlier parameters is to conduct a principal components analysis on the samples, which projects high dimensional data on lower dimensional space. Plotting the samples on the first two principal components (PC1 and PC2) can identify natural clusters within the growth curve data as well as outliers.
 
 ```{r}
@@ -316,7 +315,8 @@ aucl_formatting_function <- function(growthcurver_data, aucl_or_r) {
     
     concentration_pattern <- paste(".+-", concentration_vector [concentration], "-.", sep = "")
     
-    concentration_alone <- sample_area_insecticide_day [grep(pattern = concentration_pattern, x = sample_area_insecticide_day$sample), ]
+    concentration_alone <- sample_area_insecticide_day [grep(pattern = concentration_pattern,
+                                                             x = sample_area_insecticide_day$sample), ]
     
     concentration_alone$concentration <- concentration_vector [concentration]
     
@@ -409,7 +409,7 @@ trans_shapiro_result <- shapiro_test(trans_insect_conc_day_model_metrics$.resid)
 
 layout(matrix(c(1,1,2,3), 2, 2, byrow = TRUE))
 
-# homogoneity of variance
+# homogeneity of variance
 plot(trans_insect_conc_day_model,c(1,2,5))
 ```
 
@@ -496,7 +496,7 @@ summ_stats <- gofstat(list(fit_wb, fit_ln, fit_g),  fitnames = c("weibull", "log
 # looks like a pretty good approximation apart from one end of the distribution tail (QQ-plot). 
 ```
 
-Contrary to the Shapiro Wilks Test, the AIC and other goodness of fit statistics suggest lognormal is the closest representation of the data distribution. This is supported by P-P plot, comparison of histogram with theoretical densities, comparison of empircal and theoretical CDF and partially by the Q-Q plot. 
+Contrary to the Shapiro Wilks Test, the AIC and other goodness of fit statistics suggest lognormal is the closest representation of the data distribution. This is supported by P-P plot, comparison of histogram with theoretical densities, comparison of empirical and theoretical CDF and partially by the Q-Q plot. 
 
 I ran the analysis again without Thiacloprid-1-6, the only outlier with a standardised residual > 5. Now my data passes a Shapiro Wilks Test. All this means is "I cannot reject the hypothesis that the sample comes from a population which has a normal distribution". Due to this vaguery I ran my analysis with and without the observation. The interaction between Thiacloprid and Concentration was significant in comparison to the interaction between Control and Concentration for both. 
 
@@ -666,7 +666,7 @@ add_global_label((wrap_plots(mean_plots)),
                  Ylab = "AUC", Xlab = "Concentration")
 ```
 
-For a visualisation of mean AUC vs concentration for each insecticide (control (no insecticide) separate.
+For a visualisation of mean AUC vs concentration for each insecticide (control (no insecticide)) separate.
 
 ```{r}
 control_sep_mean_plots_function <- function(d_gc) {
