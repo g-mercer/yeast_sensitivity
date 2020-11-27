@@ -6,5 +6,296 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
 ```
+
+Machine Settings:
+
+* Number of Cycles - 192
+
+* Cycle Length - 300s
+
+* Wavelength - 600nm
+
+* Temperature - 30°C
+
+* Shake - Before Each Cycle (258s)
+
+* Shake Mode - Double Orbital
+
+* Shake Frequency - 200rpm
+
+* Total Well Volume - 200µl
+
+Formatted microplate reader output file to remove gaps and make data easier to process. For example, edited time into minute format. The amount of shaking has changed to 258s because this was the maximum when 96 wells are being measured. The more wells measured, the longer it takes the spectrophotometer to take the measurements. 
+
+```{zsh raw-file-formatting}
+#!/usr/bin/env zsh
+
+# setwd
+cd /Users/guy/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/insecticides_salt_sens
+
+./WHATIDID.sh 
+```
+
+```{r}
+library(tidyverse)
+library(knitr)
+library(growthcurver)
+library(pastecs)
+library(ibd)
+library(rstatix)
+library(ggpubr)
+library(broom)
+library(patchwork)
+library(sjPlot)
+library(sjmisc)
+library(sjlabelled)
+# library(fitdistrplus)
+``` 
+
+```{r}
+# set wd
+setwd("~/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/insecticides_salt_sens/")
+
+# read csv
+insect_sens <- read.csv(file = "./results/insecticide_salt_sens_formatted.csv", header = FALSE, stringsAsFactors = FALSE)
+
+# formatting function
+sens_data_form <- function(sens_data) {
+  # transpose
+  sens_data_trans <- t(sens_data)
+  # save first row as colnames
+  colnames(sens_data_trans) <- sens_data_trans [1, ]
+  # delete first row, which is now duplicate of colnames
+  sens_data_colnames <- sens_data_trans [-1, ]
+  # remove any empty rows. Sometimes created when importing csv file 
+  sens_data_no_blanks <- sens_data_colnames[rowSums(is.na(sens_data_colnames)) != ncol(sens_data_colnames),]
+  # convert matrix into dataframe
+  sens_data_df <- as.data.frame(sens_data_no_blanks)
+  # convert everything to numeric
+  sens_data_df[] <- lapply(sens_data_df, function(x) {
+    if(is.factor(x)) as.numeric(as.character(x)) else x
+  })
+  # convert to data frame
+  sens_data_corr <- as.data.frame(sens_data_df)
+  
+  # rename row names to numbers
+  rownames(sens_data_corr) <- 1:length(rownames(sens_data_corr))
+  
+  return(sens_data_corr)
+}
+
+sens_data_corr <- sens_data_form(insect_sens)
+
+# set any negative values to 0
+sens_data_corr[sens_data_corr<0] <- 0
+```
+
+To input the data into Growthcurver I had to alter the formatting. When using Growthcurver, columns have to be looped through individually for a more detailed output. Growth curve data is fitted to the standard form of the logistic equation (sigmoidal). 
+
+```{r, include = FALSE}
+growthcurver_function <- function(sens_data_corr) {
+  
+# Let's create an output data frame to store the results in. 
+# We'll create it so that it is the right size (it's faster this way!), 
+# but leave it empty.
+num_analyses <- length(names(sens_data_corr)) - 1
+d_gc <- data.frame(sample = character(num_analyses),
+                   k = numeric(num_analyses),
+                   n0  = numeric(num_analyses),
+                   r = numeric(num_analyses),
+                   r_se = numeric(num_analyses),
+                   r_p = numeric(num_analyses),
+                   t_mid = numeric(num_analyses),
+                   t_gen = numeric(num_analyses),
+                   auc_l = numeric(num_analyses),
+                   auc_e = numeric(num_analyses),
+                   sigma = numeric(num_analyses),
+                   stringsAsFactors = FALSE)
+
+# Now, loop through all of the columns in the data frame. For each column,
+# run Growthcurver, save the most useful metrics in the output data frame,
+# and make a plot of all the growth curve data and their best fits.
+par(mfcol = c(4,4))
+par(mar = c(1,1,1,1))
+y_lim_max <- max(sens_data_corr[,setdiff(names(sens_data_corr), "time")]) - min(sens_data_corr[,setdiff(names(sens_data_corr), "time")])
+
+n <- 1    # keeps track of the current row in the output data frame
+for (col_name in names(sens_data_corr)) {
+  
+  # Don't process the column called "time". 
+  # It contains time and not absorbance data.
+  if (col_name != "time") {
+    
+    # Create a temporary data frame that contains just the time and current col
+    sens_data_corr_loop <- sens_data_corr[, c("time", col_name)]
+    
+    # Now, call Growthcurver to calculate the metrics using SummarizeGrowth
+    gc_fit <- SummarizeGrowth(data_t = sens_data_corr_loop[, "time"], 
+                              data_n = sens_data_corr_loop[, col_name],
+                              bg_correct = "none")
+    
+    # Now, add the metrics from this column to the next row (n) in the 
+    # output data frame, and increment the row counter (n)
+    d_gc$sample[n] <- col_name
+    d_gc[n, 2:11] <- c(gc_fit$vals$k,
+                       gc_fit$vals$n0,
+                       gc_fit$vals$r,
+                       gc_fit$vals$r_se,
+                       gc_fit$vals$r_p,
+                       gc_fit$vals$t_mid,
+                       gc_fit$vals$t_gen,
+                       gc_fit$vals$auc_l,
+                       gc_fit$vals$auc_e,
+                       gc_fit$vals$sigma)
+    n <- n + 1
+    
+    # Finally, plot the raw data and the fitted curve
+    n_obs <- length(gc_fit$data$t)
+    plot(gc_fit$data$t, gc_fit$data$N, 
+         pch = 20, 
+         xlim = c(0, 960), 
+         ylim = c(0, y_lim_max),
+         cex = 0.6, xaxt = "n", yaxt = "n")
+    text(x = 960 / 2, y = y_lim_max, labels = col_name, pos = 1)
+    lines(gc_fit$data$t, predict(gc_fit$model),col = "red")
+  }
+}
+
+# Uncomment the next line to save the plots from your 96-well plate to a file
+# dev.off()
+
+return(d_gc)
+
+}
+
+d_gc <- growthcurver_function(sens_data_corr = sens_data_corr)
+```
+
+```{r}
+replicates_of_interest <- colnames(sens_data_corr)
+
+replicates_of_interest_df <- tibble(matrix(nrow=nrow(sens_data_corr)))
+
+for (sample in 1:length(replicates_of_interest)) {
+  
+  replicate_col <- sens_data_corr [ , grep(pattern = replicates_of_interest [sample], x = names(sens_data_corr))]
+  
+  replicates_of_interest_df [ , sample] <- replicate_col
+  
+}
+
+colnames(replicates_of_interest_df) <- replicates_of_interest 
+
+replicates_of_interest_curves <- growthcurver_function(sens_data_corr = replicates_of_interest_df)
+
+```
+
+```{r}
+d_gc <- as_tibble(d_gc)
+
+# Plot a histogram of the sigma values in order to check for outliers
+hist(d_gc$sigma, main = "Histogram of sigma values", xlab = "sigma")
+
+# Show the top 50 samples with the largest sigma value 
+# (with the worst model fit to the growth curve data)
+high_sigma <- d_gc %>% top_n(20, sigma) %>% arrange(desc(sigma))
+
+high_sigma
+```
+
+```{r}
+pca_gc_out <- as_tibble(d_gc) 
+
+# Prepare the gc_out data for the PCA
+rownames(pca_gc_out) <- pca_gc_out$sample
+
+# Do the PCA
+pca.res <- prcomp(pca_gc_out %>% select(k:sigma), center=TRUE, scale=TRUE)
+
+# pdf(file="pca.pdf") if i want to save the plot
+# Plot the results
+as_tibble(list(PC1=pca.res$x[,1],
+                   PC2=pca.res$x[,2],
+                   samples = rownames(pca_gc_out))) %>% 
+  ggplot(aes(x=PC1,y=PC2, label=samples)) + 
+geom_text(size = 1)
+# dev.off()
+```
+
+The above told me what I already knew. That the solubility of Thiacloprid at 5mM is now an issue, and even more so with salt. Remove Thiacloprid + Salt from the analysis because the AUC measurements aren't reliable. thia-high-2 and thia-high-5 didn't start from 0 so inflated auc-L so remove. 
+
+```{r}
+# save a complete version of the data.
+growthcurver_data <- d_gc
+
+d_gc <-  d_gc [-grep(pattern = "thia-high-salt-*", x = d_gc$sample), ]
+
+d_gc <-  d_gc [-grep(pattern = "thia-high-[25]" , x = d_gc$sample), ]
+
+```
+
+Create a linear model with auc_l as the dependent variable and treatment as the factor. 
+
+```{r}
+# extract sample and auc_l from d_gc
+sample_aucl <- d_gc [, c(1,9)]
+
+sample <- sample_aucl [, 1]
+
+# add treatment column 
+factor_levels <- c("acet-high", "acet-high-salt", "acet-low", "acet-low-salt", "control", "control-salt",
+                   "thia-high", "thia-low", "thia-low-salt")
+
+for (level in 1:length(factor_levels)) {
+  
+  level_name <- paste0("^", factor_levels [level], "-.$", sep = "")
+  
+  sample_aucl$sample <- gsub(pattern = level_name, replacement = factor_levels [level], x = sample_aucl$sample)
+
+}
+
+colnames(sample_aucl) <- c("treatment", "auc_l")
+
+# add sample column that conserves replicate number back to df
+sample_aucl [, 3] <- sample
+
+# convert treatment to factor
+sample_aucl$treatment <- as.factor(sample_aucl$treatment)
+
+# reorder insecticide factor so control comes first
+sample_aucl$treatment <- relevel(sample_aucl$treatment, "control")
+
+aucl_treatment_model <- lm(auc_l ~ treatment, data = sample_aucl)
+
+summary(aucl_treatment_model)
+```
+
+Test assumptions of linear regression.
+
+```{r}
+# Inspect the model diagnostic metrics
+aucl_treatment_model_metrics <- augment(aucl_treatment_model)
+
+# normality test
+shapiro_result <- shapiro_test(aucl_treatment_model_metrics$.resid)
+
+shapiro_result
+
+# homogeneity of variance
+par(mfrow = c(2, 2))
+plot(aucl_treatment_model)
+
+plot(density(aucl_treatment_model_metrics$.resid))
+```
+
+Bizarrely thia low and acet high had significantly higher aucl than the control, so they had a proliferative effect? Regarding the combinations compared to the treatments alone there did appear to synergy in some cases but discord (?) in others. 
+
+Not sure how to work out additive effect but:
+
+treatment thia-low has a +105.045 effect and treatment control-salt has a -51.008 effect then if additive relationship +54.037 for treatment thia-low-salt. Instead -1.421, therefore synergistic. Same for acet-high (+91.659) + control-salt (-51.008) = +40.651. Instead acet-high-salt -39.854. But, for acet-low (46.385) + control-salt (-51.008) = -4.623. Instead, acet-low-salt 25.133.
+
+All in all inconclusive because insecticides alone had this unexpected proliferative effect. Could this be the insecticide precipitating out of the solution as evaporation occurs? Plate position of control? 
+
+Do it again without thiacloprid and 4 insecticides with dmso as solvent and only at 5mM concentration. This time move control positions and see if this makes a difference. It will only take two days in total. 

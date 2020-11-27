@@ -170,7 +170,11 @@ return(d_gc)
 d_gc <- growthcurver_function(sens_data_corr = sens_data_corr)
 ```
 
+There is something odd about sens_data_corr. When passing it to d_gc the replicate growth curves are no longer plotted.If, however, I set replicates_of_interest <- colnames(sens_data_corr) below. Then the individual plots are output. Even so on the surface replicates_of_interest_df is the same as sens_data_corr????
+
 ```{r}
+# replicates_of_interest <- colnames(sens_data_corr)
+  
 replicates_of_interest <- c("time", "chlorpyrifos-0.1-7", "tefluthrin-0.1-7", "thiacloprid-5-4", "thiacloprid-5-5", "control-5-7", "thiacloprid-1-3", "control-1-8", "imidacloprid-0.01-8", "flupyradifurone-0.01-8", "thiacloprid-1-6")
 
 replicates_of_interest_df <- tibble(matrix(nrow=nrow(sens_data_corr)))
@@ -185,7 +189,7 @@ for (sample in 1:length(replicates_of_interest)) {
 
 colnames(replicates_of_interest_df) <- replicates_of_interest 
 
-replicates_of_interest_ <- growthcurver_function(sens_data_corr = replicates_of_interest_df)
+replicates_of_interest_curves <- growthcurver_function(sens_data_corr = replicates_of_interest_df)
 
 ```
 
@@ -367,36 +371,32 @@ par(mfrow = c(2, 2))
 plot(insect_conc_day_model)
 ```
 
-Residuals don't have constant variance and shapiro test fails (not normally distributed). Look at the distribution of the dependent variable to visually identify potential transformation. Data is negatively skewed. A reflection and log transformation might make the dependent variable normally distributed. 
+Remember the myths of linear regression. The dependent variable doesn't need to be normally distributed. The model residuals, however, do. 
+
+There are four basic assumptions of linear regression. These are:
+
+the mean of the data is a linear function of the explanatory variable(s)*;
+the residuals are normally distributed with mean of zero;
+the variance of the residuals is the same for all values of the explanatory variables; and
+the residuals should be independent of each other.
+
+([link](https://mickteaching.wordpress.com/2016/04/19/data-need-to-be-normally-distributed-and-other-myths-of-linear-regression/#:~:text=Neither%20is%20required.,of%20the%20residuals%20is%20zero.))
+
+REMEMBER THIS!
+
+Residuals don't have constant variance and shapiro test fails (not normally distributed). Look at the distribution of the model residuals to visually identify potential transformation. Data is negatively skewed. A reflection and log transformation might make the model residuals normally distributed. 
 
 ```{r}
-density <- density(model_df_anomalies_removed$auc_l)
+density <- density(insect_conc_day_model_metrics$.resid)
 
 transformed_data <- model_df_anomalies_removed
 
 # makes auc_l positively skewed
 transformed_data$auc_l <- 1000 - transformed_data$auc_l
 
-reflected_density <- density(transformed_data$auc_l)
-
 transformed_data$auc_l <- log10(transformed_data$auc_l)
 
-log_density <- density(transformed_data$auc_l)
-
-layout(matrix(c(1,0,2,
-                0,3,0), 2, 3, byrow = TRUE))
-
-plot(density, main = "Density")
-
-plot(reflected_density, main = "Reflected Density")
-
-plot(log_density, main = "Log Reflected Density")
-
-```
-
-auc_l distribution looks closer to a normal distribution. Construct model again using this transformation and inspect residual plots etc.
-
-```{r}
+# construct model with transformed data
 trans_insect_conc_day_model <- lm(auc_l ~ insecticide + concentration + day + insecticide*concentration, data = transformed_data)
 
 summary(trans_insect_conc_day_model)
@@ -407,6 +407,22 @@ trans_insect_conc_day_model_metrics <- augment(trans_insect_conc_day_model)
 # normality test
 trans_shapiro_result <- shapiro_test(trans_insect_conc_day_model_metrics$.resid)
 
+trans_shapiro_result
+
+# plot distribution of model residuals again
+trans_density <- density(trans_insect_conc_day_model_metrics$.resid)
+
+# sort out title
+par(mfrow = c(1, 2))
+
+plot(density, main = "Residuals Distribution")
+
+plot(trans_density, main = "Log Transformed Residuals Distribution")
+```
+
+Model residuals look closer to a normal distribution and shapiro wilks test now fails. 18% chance of observing this result if the model residuals were normally distributed.
+
+```{r}
 layout(matrix(c(1,1,2,3), 2, 2, byrow = TRUE))
 
 # homogeneity of variance
@@ -498,7 +514,7 @@ summ_stats <- gofstat(list(fit_wb, fit_ln, fit_g),  fitnames = c("weibull", "log
 
 Contrary to the Shapiro Wilks Test, the AIC and other goodness of fit statistics suggest lognormal is the closest representation of the data distribution. This is supported by P-P plot, comparison of histogram with theoretical densities, comparison of empirical and theoretical CDF and partially by the Q-Q plot. 
 
-I ran the analysis again without Thiacloprid-1-6, the only outlier with a standardised residual > 5. Now my data passes a Shapiro Wilks Test. All this means is "I cannot reject the hypothesis that the sample comes from a population which has a normal distribution". Due to this vaguery I ran my analysis with and without the observation. The interaction between Thiacloprid and Concentration was significant in comparison to the interaction between Control and Concentration for both. 
+I ran the analysis again without Thiacloprid-1-6, the only outlier with a standardised residual > 5. Now my data passes a Shapiro Wilks Test. All this means is "I cannot reject the hypothesis that the model residuals come from a population which has a normal distribution". Due to this vaguery I ran my analysis with and without the observation. The interaction between Thiacloprid and Concentration was significant in comparison to the interaction between Control and Concentration for both. 
 
 For a visualisation of mean AUC vs concentration for each insecticide (control part of insecticide)
 
