@@ -245,12 +245,12 @@ sample_aucl <- d_gc [, c(1,9)]
 sample <- sample_aucl [, 1]
 
 # add treatment column 
-factor_levels <- c("acet-high", "acet-high-salt", "acet-low", "acet-low-salt", "control", "control-salt",
-                   "thia-high", "thia-low", "thia-low-salt")
+factor_levels <- c("acet-high", "acet-low", "control",
+                   "thia-high", "thia-low")
 
 for (level in 1:length(factor_levels)) {
   
-  level_name <- paste0("^", factor_levels [level], "-.$", sep = "")
+  level_name <- paste0("^", factor_levels [level], "-.*$", sep = "")
   
   sample_aucl$sample <- gsub(pattern = level_name, replacement = factor_levels [level], x = sample_aucl$sample)
 
@@ -267,12 +267,16 @@ sample_aucl$treatment <- as.factor(sample_aucl$treatment)
 # reorder insecticide factor so control comes first
 sample_aucl$treatment <- relevel(sample_aucl$treatment, "control")
 
-aucl_treatment_model <- lm(auc_l ~ treatment, data = sample_aucl)
+salt_logical <- grepl(pattern = "*-salt-*", x = sample_aucl$sample)
+
+sample_aucl$salt <- salt_logical
+
+aucl_treatment_model <- lm(auc_l ~ treatment + salt + (salt * treatment), data = sample_aucl)
 
 summary(aucl_treatment_model)
 ```
 
-Test assumptions of linear regression.
+Test assumptions of linear regression. In the model output above, the significance value for the intercept is testing whether the intercept is significantly different from zero. Rather useless in this situation. 
 
 ```{r}
 # Inspect the model diagnostic metrics
@@ -290,6 +294,8 @@ plot(aucl_treatment_model)
 plot(density(aucl_treatment_model_metrics$.resid))
 ```
 
+FOR aucl ~ treatment when each level in the factor was simply the different combinations or salt, concentration and insecticide. 
+
 Bizarrely thia low and acet high had significantly higher aucl than the control, so they had a proliferative effect? Regarding the combinations compared to the treatments alone there did appear to synergy in some cases but discord (?) in others. 
 
 Not sure how to work out additive effect but:
@@ -299,3 +305,14 @@ treatment thia-low has a +105.045 effect and treatment control-salt has a -51.00
 All in all inconclusive because insecticides alone had this unexpected proliferative effect. Could this be the insecticide precipitating out of the solution as evaporation occurs? Plate position of control? 
 
 Do it again without thiacloprid and 4 insecticides with dmso as solvent and only at 5mM concentration. This time move control positions and see if this makes a difference. It will only take two days in total. 
+
+For aucl ~ treatment + salt + (salt * treatment) the output is essentially the same but now the synergy and discord is calculated for me. 
+
+eg. before Same for acet-high (+91.659) + control-salt (-51.008) = +40.651. Instead acet-high-salt -39.854. Now the interaction between treatmentacet-high:saltTRUE = -80.50, which is the value required to go from +40.651 to -39.854. 
+
+So the output of the two models were almost the same. The second model is better though because it's test the significance of the interaction term. 
+
+```{r}
+boxplot(sample_aucl)
+```
+
