@@ -43,15 +43,10 @@ library(tidyverse)
 library(knitr)
 library(growthcurver)
 library(pastecs)
-library(ibd)
 library(rstatix)
 library(ggpubr)
 library(broom)
 library(patchwork)
-library(sjPlot)
-library(sjmisc)
-library(sjlabelled)
-# library(fitdistrplus)
 ``` 
 
 ```{r}
@@ -366,6 +361,8 @@ insect_conc_day_model_metrics <- augment(insect_conc_day_model)
 # normality test
 shapiro_result <- shapiro_test(insect_conc_day_model_metrics$.resid)
 
+shapiro_result
+
 # homogoneity of variance
 par(mfrow = c(2, 2))
 plot(insect_conc_day_model)
@@ -384,7 +381,7 @@ the residuals should be independent of each other.
 
 REMEMBER THIS!
 
-Residuals don't have constant variance and shapiro test fails (not normally distributed). Look at the distribution of the model residuals to visually identify potential transformation. Data is negatively skewed. A reflection and log transformation might make the model residuals normally distributed. 
+Residuals don't have constant variance and shapiro test fails (significantly different from normally distributed). Look at the distribution of the model residuals to visually identify potential transformation. Data is negatively skewed. A reflection and log transformation might make the model residuals normally distributed. 
 
 ```{r}
 density <- density(insect_conc_day_model_metrics$.resid)
@@ -413,7 +410,7 @@ trans_shapiro_result
 trans_density <- density(trans_insect_conc_day_model_metrics$.resid)
 
 # sort out title
-par(mfrow = c(1, 2))
+par(mfrow = c(1, 2), cex.main = 0.8)
 
 plot(density, main = "Residuals Distribution")
 
@@ -429,90 +426,7 @@ layout(matrix(c(1,1,2,3), 2, 2, byrow = TRUE))
 plot(trans_insect_conc_day_model,c(1,2,5))
 ```
 
-Interaction between thiacloprid and concentration is still significant. Investigate outliers.
-
-Filter model metrics - return only samples with > absolute 2.95 standardised residual ([link](http://www.sthda.com/english/articles/39-regression-model-diagnostics/161-linear-regression-assumptions-and-diagnostics-in-r-essentials/#homogeneity-of-variance)) and mean cook's distance * 4 = 0.0136 ([link](http://r-statistics.co/Outlier-Treatment-With-R.html)) (high influence: this is comparable to 4/(n - p - 1) = 0.0115 ([link](http://www.sthda.com/english/articles/39-regression-model-diagnostics/161-linear-regression-assumptions-and-diagnostics-in-r-essentials/#homogeneity-of-variance))). Depending on sources extremely different interpretations of Cook's values and what constitutes influential. This ([link](https://online.stat.psu.edu/stat462/node/173/)) says >1 influential!
-
-```{r}
-# cook's distnace thresholds
-
-# 4 / (nrow(trans_insect_conc_day_model_metrics) - 3- 1)
-
-cook_cutoff <- mean(trans_insect_conc_day_model_metrics$.cooksd) * 4
-
-stand_residual_cutoff <- 2.95
-
-outliers_index <- which(trans_insect_conc_day_model_metrics$.cooksd > cook_cutoff & abs(trans_insect_conc_day_model_metrics$.std.resid) > stand_residual_cutoff)
-
-outliers_metrics <- tibble()
-
-colnames(outliers_metrics) <- colnames(trans_insect_conc_day_model_metrics)
-
-for (outlier in 1:length(outliers_index)) {
-  
-  outlier_row <- trans_insect_conc_day_model_metrics [outliers_index [outlier], ]
-  
-  outliers_metrics <- rbind(outlier_row, outliers_metrics)
-  
-}
-```
-
-The cook’s distance for each observation i measures the change in Ŷ  (fitted Y) for all observations with and without the presence of observation i, so we know how much the observation i impacted the fitted values ([link](http://r-statistics.co/Outlier-Treatment-With-R.html)). How many of the observations above the cook cutoff are 5mM? 85%. The 5mM concentrations have a large influence over the fitted/predicted values. This is because Cook's distance depends on both residual (y value) and leverage (x value). Looking at the Cook's distance then is misleading because x was in experimental design.  
-
-```{r}
-above_cook_cutoff <- which(trans_insect_conc_day_model_metrics$.cooksd > cook_cutoff)
-
-above_cook_cutoff_5_conc <- which(trans_insect_conc_day_model_metrics$.cooksd > cook_cutoff & trans_insect_conc_day_model_metrics$concentration == 5)
-
-prop_high_cook <- length(above_cook_cutoff_5_conc) / length(above_cook_cutoff)
-```
-
-The observations above aren't anomalies. They are outliers and for this reason I can't exclude them from the data. After a log transformation the model residuals reject the null hypothesis of a shapiro-wilks test (the data distribution follows a normal distribution). 
-
-I have to identify the distribution of my data. Fitdistrplus masks a part of tidyverse (I think). Once it's loaded the PCA plot fails. If I unload the package it doesn't solve the issue. I have to close R and reopen. This is why fitdistrplus isn't loaded at the beginning like the other packages. 
-
-```{r}
-library(fitdistrplus)
-
-positive_skew <- 1000-(model_df_anomalies_removed$auc_l)
-
-# mirror images of each other. I have reflected the negative skew by subtracting each score from a 
-# constant that is larger than the largest score. Skewness is the same magnitude but in the opposite direction.
-
-# plotdist(model_df_anomalies_removed$auc_l, histo = TRUE, demp = TRUE)
-
-# descdist(model_df_anomalies_removed$auc_l, boot = 1000)
-
-plotdist(positive_skew, histo = TRUE, demp = TRUE)
-
-descdist(positive_skew, boot = 1000)
-
-fit_wb <-  fitdist(positive_skew, "weibull")
-
-fit_ln <-  fitdist(positive_skew, "lnorm")
-
-fit_g <-  fitdist(positive_skew, "gamma")
-
-par(mfrow = c(2, 2))
-
-plot.legend <- c("weibull", "lognormal", "gamma")
-
-denscomp(list(fit_wb, fit_ln, fit_g), legendtext = plot.legend)
-
-qqcomp(list(fit_wb, fit_ln, fit_g), legendtext = plot.legend)
-
-cdfcomp(list(fit_wb, fit_ln, fit_g), legendtext = plot.legend)
- 
-ppcomp(list(fit_wb, fit_ln, fit_g), legendtext = plot.legend)
-
-summ_stats <- gofstat(list(fit_wb, fit_ln, fit_g),  fitnames = c("weibull", "lognormal", "gamma"))
-
-# looks like lognnormal is the best fit with the lowest AIC score, and lowest for the other three statistics. What I don't 
-# understand is how performing reflection and then log transforming the data didn't work because a lognormal distribution 
-# looks like a pretty good approximation apart from one end of the distribution tail (QQ-plot). 
-```
-
-Contrary to the Shapiro Wilks Test, the AIC and other goodness of fit statistics suggest lognormal is the closest representation of the data distribution. This is supported by P-P plot, comparison of histogram with theoretical densities, comparison of empirical and theoretical CDF and partially by the Q-Q plot. 
+Interaction between thiacloprid and concentration is still significant. 
 
 I ran the analysis again without Thiacloprid-1-6, the only outlier with a standardised residual > 5. Now my data passes a Shapiro Wilks Test. All this means is "I cannot reject the hypothesis that the model residuals come from a population which has a normal distribution". Due to this vaguery I ran my analysis with and without the observation. The interaction between Thiacloprid and Concentration was significant in comparison to the interaction between Control and Concentration for both. 
 
@@ -906,5 +820,3 @@ drop1(full.lmer,test="Chisq")
 
 
 ```
-
-Make model outputs presentable using sjPlot. 

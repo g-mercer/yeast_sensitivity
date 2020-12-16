@@ -31,7 +31,7 @@ cp tmp/$2_formatted.csv results/$2_formatted.csv
 
 seq -s ',' 0 5 960 > tmp/time
 echo "time" > tmp/time_header
-paste -d ',' tmp/time_header tmp/time > results/formatted_compiled.csv
+paste -d ',' tmp/time_header tmp/time > results/insect_salt_compiled.csv
 
 VAR=(`seq -s ' ' 1 1 2`)
 
@@ -39,6 +39,6 @@ for i in $VAR; do
  
 format_growth_assay_data salt-interaction-${i} replicate_${i}
 
-tail -n +2 tmp/replicate_${i}_formatted.csv >> results/formatted_compiled.csv
+tail -n +2 tmp/replicate_${i}_formatted.csv >> results/insect_salt_compiled.csv
 
 done

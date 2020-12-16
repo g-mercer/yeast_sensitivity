@@ -1,0 +1,418 @@
+---
+title: "salt_effect"
+author: "Guy Mercer"
+date: "27/11/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+Machine Settings:
+
+* Number of Cycles - 192
+
+* Cycle Length - 300s
+
+* Wavelength - 600nm
+
+* Temperature - 30°C
+
+* Shake - Before Each Cycle (258s)
+
+* Shake Mode - Double Orbital
+
+* Shake Frequency - 200rpm
+
+* Total Well Volume - 200µl
+
+Formatted microplate reader output file to remove gaps and make data easier to process. For example, edited time into minute format. The amount of shaking has changed to 258s because this was the maximum when 96 wells are being measured. The more wells measured, the longer it takes the spectrophotometer to take the measurements. 
+
+```{zsh raw-file-formatting}
+#!/usr/bin/env zsh
+
+# setwd
+cd /Users/guy/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/insecticides_salt_sens
+
+./WHATIDID.sh 
+```
+
+```{r}
+library(tidyverse)
+library(knitr)
+library(growthcurver)
+library(pastecs)
+library(ibd)
+library(rstatix)
+library(ggpubr)
+library(broom)
+library(patchwork)
+library(sjPlot)
+library(sjmisc)
+library(sjlabelled)
+# library(fitdistrplus)
+``` 
+
+```{r}
+# set wd
+setwd("~/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/insecticides_salt_sens/")
+
+# read csv
+insect_sens <- read.csv(file = "./results/insect_salt_compiled.csv", header = FALSE, stringsAsFactors = FALSE)
+
+# formatting function
+sens_data_form <- function(sens_data) {
+  # transpose
+  sens_data_trans <- t(sens_data)
+  # save first row as colnames
+  colnames(sens_data_trans) <- sens_data_trans [1, ]
+  # delete first row, which is now duplicate of colnames
+  sens_data_colnames <- sens_data_trans [-1, ]
+  # remove any empty rows. Sometimes created when importing csv file 
+  sens_data_no_blanks <- sens_data_colnames[rowSums(is.na(sens_data_colnames)) != ncol(sens_data_colnames),]
+  # convert matrix into dataframe
+  sens_data_df <- as.data.frame(sens_data_no_blanks)
+  # convert everything to numeric
+  sens_data_df[] <- lapply(sens_data_df, function(x) {
+    if(is.factor(x)) as.numeric(as.character(x)) else x
+  })
+  # convert to data frame
+  sens_data_corr <- as.data.frame(sens_data_df)
+  
+  # rename row names to numbers
+  rownames(sens_data_corr) <- 1:length(rownames(sens_data_corr))
+  
+  return(sens_data_corr)
+}
+
+sens_data_corr <- sens_data_form(insect_sens)
+
+# set any negative values to 0
+sens_data_corr[sens_data_corr<0] <- 0
+```
+
+To input the data into Growthcurver I had to alter the formatting. When using Growthcurver, columns have to be looped through individually for a more detailed output. Growth curve data is fitted to the standard form of the logistic equation (sigmoidal). 
+
+```{r, include = FALSE}
+growthcurver_function <- function(sens_data_corr) {
+  
+# Let's create an output data frame to store the results in. 
+# We'll create it so that it is the right size (it's faster this way!), 
+# but leave it empty.
+num_analyses <- length(names(sens_data_corr)) - 1
+d_gc <- data.frame(sample = character(num_analyses),
+                   k = numeric(num_analyses),
+                   n0  = numeric(num_analyses),
+                   r = numeric(num_analyses),
+                   r_se = numeric(num_analyses),
+                   r_p = numeric(num_analyses),
+                   t_mid = numeric(num_analyses),
+                   t_gen = numeric(num_analyses),
+                   auc_l = numeric(num_analyses),
+                   auc_e = numeric(num_analyses),
+                   sigma = numeric(num_analyses),
+                   stringsAsFactors = FALSE)
+
+# Now, loop through all of the columns in the data frame. For each column,
+# run Growthcurver, save the most useful metrics in the output data frame,
+# and make a plot of all the growth curve data and their best fits.
+par(mfcol = c(4,4))
+par(mar = c(1,1,1,1))
+y_lim_max <- max(sens_data_corr[,setdiff(names(sens_data_corr), "time")]) - min(sens_data_corr[,setdiff(names(sens_data_corr), "time")])
+
+n <- 1    # keeps track of the current row in the output data frame
+for (col_name in names(sens_data_corr)) {
+  
+  # Don't process the column called "time". 
+  # It contains time and not absorbance data.
+  if (col_name != "time") {
+    
+    # Create a temporary data frame that contains just the time and current col
+    sens_data_corr_loop <- sens_data_corr[, c("time", col_name)]
+    
+    # Now, call Growthcurver to calculate the metrics using SummarizeGrowth
+    gc_fit <- SummarizeGrowth(data_t = sens_data_corr_loop[, "time"], 
+                              data_n = sens_data_corr_loop[, col_name],
+                              bg_correct = "none")
+    
+    # Now, add the metrics from this column to the next row (n) in the 
+    # output data frame, and increment the row counter (n)
+    d_gc$sample[n] <- col_name
+    d_gc[n, 2:11] <- c(gc_fit$vals$k,
+                       gc_fit$vals$n0,
+                       gc_fit$vals$r,
+                       gc_fit$vals$r_se,
+                       gc_fit$vals$r_p,
+                       gc_fit$vals$t_mid,
+                       gc_fit$vals$t_gen,
+                       gc_fit$vals$auc_l,
+                       gc_fit$vals$auc_e,
+                       gc_fit$vals$sigma)
+    n <- n + 1
+    
+    # Finally, plot the raw data and the fitted curve
+    n_obs <- length(gc_fit$data$t)
+    plot(gc_fit$data$t, gc_fit$data$N, 
+         pch = 20, 
+         xlim = c(0, 960), 
+         ylim = c(0, y_lim_max),
+         cex = 0.6, xaxt = "n", yaxt = "n")
+    text(x = 960 / 2, y = y_lim_max, labels = col_name, pos = 1)
+    lines(gc_fit$data$t, predict(gc_fit$model),col = "red")
+  }
+}
+
+# Uncomment the next line to save the plots from your 96-well plate to a file
+# dev.off()
+
+return(d_gc)
+
+}
+
+d_gc <- growthcurver_function(sens_data_corr = sens_data_corr)
+```
+
+```{r}
+replicates_of_interest <- colnames(sens_data_corr)
+
+replicates_of_interest_df <- tibble(matrix(nrow=nrow(sens_data_corr)))
+
+for (sample in 1:length(replicates_of_interest)) {
+  
+  replicate_col <- sens_data_corr [ , grep(pattern = replicates_of_interest [sample], x = names(sens_data_corr))]
+  
+  replicates_of_interest_df [ , sample] <- replicate_col
+  
+}
+
+colnames(replicates_of_interest_df) <- replicates_of_interest 
+
+replicates_of_interest_curves <- growthcurver_function(sens_data_corr = replicates_of_interest_df)
+
+```
+
+Unsure what caused the cloth-high-salt scatter at the beginning of some of the growth curves. 
+
+```{r}
+d_gc <- as_tibble(d_gc)
+
+# Plot a histogram of the sigma values in order to check for outliers
+hist(d_gc$sigma, main = "Histogram of sigma values", xlab = "sigma")
+
+# Show the top 50 samples with the largest sigma value 
+# (with the worst model fit to the growth curve data)
+high_sigma <- d_gc %>% top_n(20, sigma) %>% arrange(desc(sigma))
+
+high_sigma
+```
+
+```{r}
+pca_gc_out <- as_tibble(d_gc) 
+
+# Prepare the gc_out data for the PCA
+rownames(pca_gc_out) <- pca_gc_out$sample
+
+# Do the PCA
+pca.res <- prcomp(pca_gc_out %>% select(k:sigma), center=TRUE, scale=TRUE)
+
+# pdf(file="pca.pdf") if i want to save the plot
+# Plot the results
+as_tibble(list(PC1=pca.res$x[,1],
+                   PC2=pca.res$x[,2],
+                   samples = rownames(pca_gc_out))) %>% 
+  ggplot(aes(x=PC1,y=PC2, label=samples)) + 
+geom_text(size = 1)
+# dev.off()
+```
+
+```{r}
+# save a complete version of the data.
+growthcurver_data <- d_gc
+
+d_gc <-  d_gc [-grep(pattern = "control-salt-2-13", x = d_gc$sample), ]
+
+d_gc <-  d_gc [-grep(pattern = "imi-high-2-8" , x = d_gc$sample), ]
+
+```
+
+Create a linear model with auc_l as the dependent variable and treatment as the factor with salt separately. 
+
+```{r}
+# extract sample and auc_l from d_gc
+sample_aucl <- d_gc [, c(1,9)]
+
+sample <- sample_aucl [, 1]
+
+# add insecticide column 
+factor_levels <- c("control", "acet", "cloth",
+                   "flu", "imi")
+
+for (level in 1:length(factor_levels)) {
+  
+  level_name <- paste0("^", factor_levels [level], "-.*$", sep = "")
+  
+  sample_aucl$sample <- gsub(pattern = level_name, replacement = factor_levels [level], x = sample_aucl$sample)
+
+}
+
+colnames(sample_aucl) <- c("insecticide", "auc_l")
+
+# add sample column that conserves replicate number back to df
+sample_aucl [, 3] <- sample
+
+# add salt column 
+salt_logical <- grepl(pattern = "*-salt-*", x = sample_aucl$sample)
+
+sample_aucl$salt <- salt_logical
+
+# add a column for day
+sample_aucl [, 5] <- sample
+
+colnames(sample_aucl) <- c("insecticide", "auc_l", "sample", "salt", "day")
+
+day_names <- c("one", "two")
+
+for (day in 1:length(day_names)) {
+  
+  day_name <- paste0(".*-", day, "-.*", sep = "")
+  
+  sample_aucl$day <- gsub(pattern = day_name, replacement = day_names [day], x = sample_aucl$day)
+
+}
+
+# add a conc column 
+sample_aucl [, 6] <- sample
+
+colnames(sample_aucl) <- c("insecticide", "auc_l", "sample", "salt", "day", "conc")
+
+conc_names <- c("low", "high")
+
+for (conc in 1:length(conc_names)) {
+  
+  conc_name <- paste0(".*-", conc_names [conc], "-.*", sep = "")
+  
+  sample_aucl$conc <- gsub(pattern = conc_name, replacement = conc_names [conc], x = sample_aucl$conc)
+
+}
+
+control_values <- sample_aucl$conc [grep(pattern = "control", x = sample_aucl$conc)]
+
+for (i in 1:length(control_values)) {
+  
+  #sample_aucl <- sample_aucl %>% replace_with_na_at(.vars = "conc", condition = ~.x == control_values [i])
+  
+  sample_aucl$conc <- gsub(pattern = control_values [i], replacement = "low" , x = sample_aucl$conc )
+}
+
+# create a treatment vector with both treatments and treatments with salt
+boxplot_treatments <- c("control", "acet-high", "acet-low", "cloth-high", "cloth-low",
+                   "flu-high", "flu-low", "imi-high", "imi-low")
+
+
+boxplot_treatments_salt <- boxplot_treatments
+
+for (i in 1:length(boxplot_treatments)) {
+  
+  new_name <- paste0(boxplot_treatments [i], "-salt", sep = "")
+  
+  boxplot_treatments_salt <- gsub(pattern = boxplot_treatments [i], replacement = new_name, x = boxplot_treatments_salt)
+  
+}
+
+boxplot_treatments_both <- c(boxplot_treatments, boxplot_treatments_salt)
+
+# create column in sample_aucl with vector
+for (treatment in 1:length(boxplot_treatments_both)) {
+  
+  treatment_name <- paste0("^", boxplot_treatments_both [treatment], "-\\d+-\\d+$", sep = "")
+  
+  sample_aucl$sample <- gsub(pattern = treatment_name, replacement = boxplot_treatments_both [treatment], x = sample_aucl$sample)
+
+}
+
+colnames(sample_aucl) <- c("insecticide", "auc_l", "boxplot_treatment", "salt", "day", "conc")
+
+
+sample_aucl [, 7] <- sample
+
+# add treatment column 
+treatment_levels <- c("control", "acet-low", "acet-high", "cloth-low", "cloth-high",
+                   "flu-low", "flu-high", "imi-low", "imi-high")
+
+for (level in 1:length(treatment_levels)) {
+  
+  treatment_name <- paste0("^", treatment_levels [level], "-.*$", sep = "")
+  
+  sample_aucl$sample <- gsub(pattern = treatment_name, replacement = treatment_levels [level], x = sample_aucl$sample)
+
+}
+
+colnames(sample_aucl) <- c("insecticide", "auc_l", "boxplot_treatment", "salt", "day", "conc", "treatment")
+
+sample_aucl [, 8] <- sample
+
+# convert treatment to factor
+sample_aucl$treatment <- as.factor(sample_aucl$treatment)
+
+# reorder insecticide factor so control comes first
+sample_aucl$treatment <- relevel(sample_aucl$treatment, "control")
+
+# convert insecticide to factor
+sample_aucl$insecticide <- as.factor(sample_aucl$insecticide)
+
+# reorder insecticide factor so control comes first
+sample_aucl$insecticide <- relevel(sample_aucl$insecticide, "control")
+
+aucl_treatment_model <- lm(auc_l ~ (salt * treatment), data = sample_aucl)
+
+summary(aucl_treatment_model)
+```
+
+Day has no effect this time so has been left out of the model. 
+
+Test assumptions of linear regression. In the model output above, the significance value for the intercept is testing whether the intercept is significantly different from zero. Rather useless in this situation. 
+
+By removing control-salt-2-13 and imi-high-2-8 the model residuals pass a shapirowilks test. Removing them doesn't change the model much output either. 
+
+```{r}
+# Inspect the model diagnostic metrics
+aucl_treatment_model_metrics <- augment(aucl_treatment_model)
+
+# normality test
+shapiro_result <- shapiro_test(aucl_treatment_model_metrics$.resid)
+
+shapiro_result
+
+# homogeneity of variance
+par(mfrow = c(2, 2))
+plot(aucl_treatment_model)
+
+plot(density(aucl_treatment_model_metrics$.resid))
+```
+
+For aucl ~ treatment + salt + (salt * treatment) the output is essentially the same but now the synergy and discord is calculated for me. 
+
+The interaction values show the difference between what would be expected if the effect of the two stressors in combination was additive and the actual result. For example, treatmentacet-high = 124.816 and salt = 5.833. Therefore, if additive treatmentacet-high = 130.649. Actual result was -157.349 lower than this, indicative of synergy.
+
+Talking points. Why do acet and flu in isolation appear to stimulate growth? Is there any practical application for that? All insecticides at the high concentration (5mM) have a synergistic effect with salt. In the case of acet and flu, however, this isn't very useful because all this synergy does it reverse the seemingly stimulatory effect of the insecticide in isolation. 
+
+Boxplot by Treatment
+
+```{r}
+# convert boxplot_treatment to factor
+sample_aucl$boxplot_treatment <- as.factor(sample_aucl$boxplot_treatment)
+
+# reorder insecticide factor so control comes first
+sample_aucl$boxplot_treatment <- factor(sample_aucl$boxplot_treatment, levels = c("control", "control-salt", "acet-high", "acet-low", "acet-high-salt", 
+                                                                                  "acet-low-salt","cloth-high", "cloth-low", "cloth-high-salt", "cloth-low-salt",
+                                                                                  "flu-high", "flu-low", "flu-high-salt", "flu-low-salt", "imi-high", "imi-low", 
+                                                                                  "imi-high-salt","imi-low-salt"))
+
+boxplot(auc_l ~ boxplot_treatment, data = sample_aucl,
+                las=2, par(mar = c(7, 4.1, 4.1, 2.1)),
+                xlab = "")
+
+```
+
+Lots of spread in the control. 
