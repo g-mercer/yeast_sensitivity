@@ -44,6 +44,8 @@ library(knitr)
 library(growthcurver)
 library(pastecs)
 library(rstatix)
+library(lmerTest)
+library(ibd)
 library(ggpubr)
 library(broom)
 library(patchwork)
@@ -250,7 +252,7 @@ d_gc <-  d_gc [-grep(pattern = "thiacloprid-1-6", x = d_gc$sample), ]
 
 ```
 
-Best option is to have three independent variables: concentration (continuous independent), insecticide (categorical independent) and day (categorical independent) and one dependent variable: AUC (continuous dependent). AUC = concentation + pesticide + day + (pesticide x concentration) (interaction).  pesticide x concentration interaction is the interesting term. To do this the data has to be reformatted so there are columns with concentration, day and insecticide. At this point sulfoxaflor and cypermethrin were removed due to evaporation and solubility issues respectively. 
+Best option is to have three independent variables: concentration (factor), insecticide (factor) and day (factor) and one dependent variable: AUC (continuous dependent). AUC = concentration + pesticide + day + (pesticide x concentration) (interaction).  pesticide x concentration interaction is the interesting term. Use a linear mixed model with day as a randome effect. To do this the data has to be reformatted so there are columns with concentration, day and insecticide. At this point sulfoxaflor and cypermethrin were removed due to evaporation and solubility issues respectively. 
 
 ```{r}
 aucl_formatting_function <- function(growthcurver_data, aucl_or_r) {
@@ -304,7 +306,7 @@ aucl_formatting_function <- function(growthcurver_data, aucl_or_r) {
   # add concentration to sample_area_insecticide_day
   
   # create concentration vector
-  concentration_vector <- c(0.001, 0.01, 0.1, 1, 5)
+  concentration_vector <- c("0.001", "0.01", "0.1", "1", "5")
   
   # create a df to save loop output in 
   sample_area_insecticide_day_concentration <- tibble()
@@ -338,34 +340,158 @@ model_df_anomalies_removed <- model_df_anomalies_removed %>%
 boxplot(auc_l ~ day, data = model_df_anomalies_removed)
 ```
 
-In my model I want to compare the interaction between no insecticide and concentration (controls) to the interaction between insecticides and concentration.
+In my model I want to see whether there is an interaction between concentration and insecticide. I need to randomly distribute the controls to the insecticides using IBD. 
+
+I need to evenly distribute 40 controls amongst 8 insecticides so that the day effect will be minimised. This requires balanced incomplete block design ([link](https://stat.ethz.ch/~meier/teaching/anova/incomplete-block-designs.html)). In my case I have 8 days (treatment, g), 8 insecticides (blocks, b), 5 samples/units per insecticide (k) and 5 replicates per day (r).
+
+Remember: N = b * k = g * r 
+
+Therefore, 40 samples to be shared among 8 insecticides, making 5 samples per insecticide. Evenly distributed according to day (5 replicates per day).
+
+In this case a BIBD doesn't exist because for 
+
+r.(k-1) = λ.(g-1)
+
+λ isn't a whole number. 
+
+There is, however, an incomplete block design.
+ 
+```{r}
+# the first output shows the block design and the second is a concurrence matrix and shows 
+# how many times any pair of treatments appears together in the same block. 
+bibd <- ibd(v = 8, b = 8, k = 5)
+
+kable(bibd$design)
+
+# shows how many days each block shares
+# kable(bibd$conc.mat)
+```
+
+Following the block design above I need to allocate the controls to the insecticides.
 
 ```{r}
+ibd_control_assignment_function <- function(model_df_anomalies_removed) {
+
+  only_controls <- model_df_anomalies_removed[grep("control", model_df_anomalies_removed$insecticide), ]
+
+  insecticide_names <- c("acetamiprid", "chlorpyrifos", "clothianidin", "flupyradifurone", "imidacloprid", "malathion", "tefluthrin", "thiacloprid")
+  
+  insecticide_names <- sample(insecticide_names)
+  
+  # make day_numerical_column
+  day_numerical <- rep(1:8, times = 1)
+  
+  day_factor <- only_controls$day
+  
+  day_factor_unique <- unique(day_factor)
+  
+  for (i in 1:length(day_factor_unique)) {
+    
+    day_factor <- gsub(pattern = day_factor_unique [i], replacement = i, x = day_factor )
+    
+  }
+  
+  only_controls$day_numerical <- day_factor
+  
+  model_df <- model_df_anomalies_removed[-grep("control", model_df_anomalies_removed$insecticide), ]
+
+  for (insecticide in 1:length(insecticide_names)) {
+  
+    ibd_row <- bibd$design [insecticide, ]
+
+    four_controls <- tibble()
+
+    for (day in 1:length(ibd_row)) {
+  
+      ibd_day <- only_controls[grep(ibd_row [day], only_controls$day_numerical), ]
+  
+      random_control <- ibd_day[sample(nrow(ibd_day), 1), ]
+  
+      only_controls <- setdiff(only_controls, random_control)
+  
+      four_controls <- rbind(four_controls, random_control)
+  
+    }
+
+    four_controls$insecticide <- gsub("control", insecticide_names [insecticide], four_controls$insecticide)
+
+    model_df <- rbind(model_df, four_controls [ ,1:5])
+
+  }
+  
+  return(model_df)
+
+}
+
+model_df_assigned_controls <- ibd_control_assignment_function(model_df_anomalies_removed)
+
+# give controls conc of 0
+only_controls <- model_df_assigned_controls [grep(pattern = "control", x = model_df_assigned_controls$sample), ]
+
+model_df_assigned_controls <- model_df_assigned_controls [-grep(pattern = "control", x = model_df_assigned_controls$sample), ]
+
+only_controls$concentration <- "0"
+
+model_df_assigned_controls <- rbind(model_df_assigned_controls, only_controls)
+
+# create a dataframe where standard df has control has conc of 0
+only_controls <- model_df_anomalies_removed [grep(pattern = "control", x = model_df_anomalies_removed$sample), ]
+
+model_df_controls_zero <- model_df_anomalies_removed [-grep(pattern = "control", x = model_df_anomalies_removed$sample), ]
+
+only_controls$concentration <- "0"
+
+model_df_controls_zero <- rbind(model_df_controls_zero, only_controls)
+```
+
+Remember that when you run the chunk above you randomly assign the controls to the insecticides again according to the IBD. See if doing this varies the results. Would show the control assignment does have an effect. Could do because I'm using an incomplete block design.
+
+```{r}
+# model_df_anomalies_removed <- model_df_controls_zero
+
+model_df_anomalies_removed <- model_df_assigned_controls
+
 # convert to factor
 model_df_anomalies_removed$insecticide <- as.factor(model_df_anomalies_removed$insecticide)
 
+# convert concentration to factor
+model_df_anomalies_removed$concentration <- as.factor(model_df_anomalies_removed$concentration)
+
+# reorder concentration factor so "0" (control) comes first
+model_df_anomalies_removed$concentration <- relevel(model_df_anomalies_removed$concentration, "0")
+
 # reorder insecticide factor so control comes first
-model_df_anomalies_removed$insecticide <- relevel(model_df_anomalies_removed$insecticide, "control")
+# model_df_anomalies_removed$insecticide <- relevel(model_df_anomalies_removed$insecticide, "control")
 
-insect_conc_day_model <- lm(auc_l ~ insecticide + concentration + day + insecticide*concentration, data = model_df_anomalies_removed)
-
-summary(insect_conc_day_model)
 ```
 
-Test assumptions of linear regression.
+Linear mixed model with control as its own level in concentration
 
 ```{r}
-# Inspect the model diagnostic metrics
-insect_conc_day_model_metrics <- augment(insect_conc_day_model)
 
-# normality test
-shapiro_result <- shapiro_test(insect_conc_day_model_metrics$.resid)
+mixed.lmer_1 <- lmer(auc_l ~ concentration + insecticide + concentration*insecticide + (1|day), data = model_df_anomalies_removed)
 
-shapiro_result
+summary(mixed.lmer_1)
+  
+mixed.lmer <- lmer(auc_l ~ insecticide + concentration + insecticide*concentration + (1|day), data = model_df_anomalies_removed)
 
-# homogoneity of variance
-par(mfrow = c(2, 2))
-plot(insect_conc_day_model)
+summary(mixed.lmer)
+
+plot(mixed.lmer)
+
+qqnorm(resid(mixed.lmer))
+
+qqline(resid(mixed.lmer))
+
+# model and term significance.
+full.lmer <- lmer(auc_l ~ insecticide + concentration + (insecticide*concentration) + (1|day), data = model_df_anomalies_removed, REML = FALSE)
+
+reduced.lmer <- lmer(auc_l ~ insecticide + concentration + (1|day), data = model_df_anomalies_removed, REML = FALSE)
+
+anova(reduced.lmer, full.lmer) 
+
+drop1(full.lmer,test="Chisq")
+
 ```
 
 Remember the myths of linear regression. The dependent variable doesn't need to be normally distributed. The model residuals, however, do. 
@@ -384,7 +510,9 @@ REMEMBER THIS!
 Residuals don't have constant variance and shapiro test fails (significantly different from normally distributed). Look at the distribution of the model residuals to visually identify potential transformation. Data is negatively skewed. A reflection and log transformation might make the model residuals normally distributed. 
 
 ```{r}
-density <- density(insect_conc_day_model_metrics$.resid)
+density <- density(resid(mixed.lmer))
+
+shapiro_test(resid(mixed.lmer))
 
 transformed_data <- model_df_anomalies_removed
 
@@ -393,21 +521,32 @@ transformed_data$auc_l <- 1000 - transformed_data$auc_l
 
 transformed_data$auc_l <- log10(transformed_data$auc_l)
 
-# construct model with transformed data
-trans_insect_conc_day_model <- lm(auc_l ~ insecticide + concentration + day + insecticide*concentration, data = transformed_data)
+mixed.lmer_trans <- lmer(auc_l ~ insecticide + concentration + insecticide*concentration + (1|day), data = transformed_data)
 
-summary(trans_insect_conc_day_model)
+summary(mixed.lmer_trans)
 
-# Inspect the model diagnostic metrics
-trans_insect_conc_day_model_metrics <- augment(trans_insect_conc_day_model)
+plot(mixed.lmer_trans)
+
+qqnorm(resid(mixed.lmer_trans))
+
+qqline(resid(mixed.lmer_trans))
+
+# model and term significance.
+full.lmer_trans <- lmer(auc_l ~ insecticide + concentration + (insecticide*concentration) + (1|day), data = transformed_data, REML = FALSE)
+
+reduced.lmer_trans <- lmer(auc_l ~ insecticide + concentration + (1|day), data = transformed_data, REML = FALSE)
+
+anova(reduced.lmer_trans, full.lmer_trans) 
+
+drop1(full.lmer_trans,test="Chisq")
 
 # normality test
-trans_shapiro_result <- shapiro_test(trans_insect_conc_day_model_metrics$.resid)
+trans_shapiro_result <- shapiro_test(resid(mixed.lmer_trans))
 
 trans_shapiro_result
 
 # plot distribution of model residuals again
-trans_density <- density(trans_insect_conc_day_model_metrics$.resid)
+trans_density <- density(resid(mixed.lmer_trans))
 
 # sort out title
 par(mfrow = c(1, 2), cex.main = 0.8)
