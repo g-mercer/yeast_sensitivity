@@ -361,7 +361,7 @@ There is, however, an incomplete block design.
 # how many times any pair of treatments appears together in the same block. 
 bibd <- ibd(v = 8, b = 8, k = 5)
 
-kable(bibd$design)
+bibd$design
 
 # shows how many days each block shares
 # kable(bibd$conc.mat)
@@ -434,7 +434,7 @@ only_controls$concentration <- "0"
 
 model_df_assigned_controls <- rbind(model_df_assigned_controls, only_controls)
 
-# create a dataframe where standard df has control has conc of 0
+# create a dataframe where standard df has controls as insecticide level and conc of 0
 only_controls <- model_df_anomalies_removed [grep(pattern = "control", x = model_df_anomalies_removed$sample), ]
 
 model_df_controls_zero <- model_df_anomalies_removed [-grep(pattern = "control", x = model_df_anomalies_removed$sample), ]
@@ -446,7 +446,12 @@ model_df_controls_zero <- rbind(model_df_controls_zero, only_controls)
 
 Remember that when you run the chunk above you randomly assign the controls to the insecticides again according to the IBD. See if doing this varies the results. Would show the control assignment does have an effect. Could do because I'm using an incomplete block design.
 
+First option (model_df_controls_zero) is where controls are within control level in insecticide factor and 0 level in concentration factor.
+Second (model_df_assigned_controls) is where controls have been distributed to each insecticide level within insecticde factor and 0 level in concentration factor. Third (model_df_anomalies_removed) is where control is a level within insecticide factor and have been distributed to concentration levels.  
+
 ```{r}
+# using each dataset as input 
+
 # model_df_anomalies_removed <- model_df_controls_zero
 
 model_df_anomalies_removed <- model_df_assigned_controls
@@ -460,18 +465,23 @@ model_df_anomalies_removed$concentration <- as.factor(model_df_anomalies_removed
 # reorder concentration factor so "0" (control) comes first
 model_df_anomalies_removed$concentration <- relevel(model_df_anomalies_removed$concentration, "0")
 
+# reorder concentration factor so "0" (control) is at the bottom of ordinal variable
+# model_df_anomalies_removed$concentration <- factor(model_df_anomalies_removed$concentration, order = TRUE,
+#                                                    levels = c("0", "0.001", "0.01", "0.1", "1", "5"))
+
 # reorder insecticide factor so control comes first
 # model_df_anomalies_removed$insecticide <- relevel(model_df_anomalies_removed$insecticide, "control")
 
 ```
 
+An important question is what does the intercept of my model represent? For a simple linear regression of a categorical variable with two levels the intercept would be one of the levels, with the other level contrasted to this level. Eg. male and female levels in sex categorical variable in car package salaries example data set ([link](http://www.sthda.com/english/articles/40-regression-analysis/163-regression-with-categorical-variables-dummy-coding-essentials-in-r/#example-of-data-set)). For more complex models like mine this isn't the case. Example on sthda has same issue where it isn't obvious what the intercept relates to. 
+
 Linear mixed model with control as its own level in concentration
 
 ```{r}
+# mixed.lmer_1 <- lmer(auc_l ~ concentration + insecticide + concentration*insecticide + (1|day), data = model_df_anomalies_removed)
 
-mixed.lmer_1 <- lmer(auc_l ~ concentration + insecticide + concentration*insecticide + (1|day), data = model_df_anomalies_removed)
-
-summary(mixed.lmer_1)
+# summary(mixed.lmer_1)
   
 mixed.lmer <- lmer(auc_l ~ insecticide + concentration + insecticide*concentration + (1|day), data = model_df_anomalies_removed)
 
@@ -491,7 +501,6 @@ reduced.lmer <- lmer(auc_l ~ insecticide + concentration + (1|day), data = model
 anova(reduced.lmer, full.lmer) 
 
 drop1(full.lmer,test="Chisq")
-
 ```
 
 Remember the myths of linear regression. The dependent variable doesn't need to be normally distributed. The model residuals, however, do. 
