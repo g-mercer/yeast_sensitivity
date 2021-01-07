@@ -86,7 +86,7 @@ sens_data_corr <- sens_data_form(insect_sens)
 sens_data_corr[sens_data_corr<0] <- 0
 ```
 
-To input the data into Growthcurver I had to alter the formatting. When using Growthcurver, columns have to be looped through individually for a more detailed output. Growth curve data is fitted to the standard form of the logistic equation (sigmoidal). Displayed below are samples of interest. The first eight samples were technical anomalies. The last five were those with large residuals that had to be excluded to make the data lognormally distributed (discussed later). 
+To input the data into Growthcurver I had to alter the formatting. When using Growthcurver, columns have to be looped through individually for a more detailed output. Growth curve data is fitted to the standard form of the logistic equation (sigmoidal).
 
 ```{r, include = FALSE}
 growthcurver_function <- function(sens_data_corr) {
@@ -167,7 +167,7 @@ return(d_gc)
 d_gc <- growthcurver_function(sens_data_corr = sens_data_corr)
 ```
 
-There is something odd about sens_data_corr. When passing it to d_gc the replicate growth curves are no longer plotted.If, however, I set replicates_of_interest <- colnames(sens_data_corr) below. Then the individual plots are output. Even so on the surface replicates_of_interest_df is the same as sens_data_corr????
+There is something odd about sens_data_corr. When passing it to d_gc the replicate growth curves are no longer plotted. If, however, I set replicates_of_interest <- colnames(sens_data_corr) below. Then the individual plots are output. Even so on the surface replicates_of_interest_df is the same as sens_data_corr????
 
 ```{r}
 # replicates_of_interest <- colnames(sens_data_corr)
@@ -189,6 +189,8 @@ colnames(replicates_of_interest_df) <- replicates_of_interest
 replicates_of_interest_curves <- growthcurver_function(sens_data_corr = replicates_of_interest_df)
 
 ```
+
+Above are replicates removed for technical reasons such as solubility and pipetting errors. Cypermethrin was removed completely because 5mM precipitated out. 
 
 Sigma values represent the residual sum of squares from the fit of the logistic curve to the data, so larger values mean poorer fit to logistic model. Cypermethrin's solubility issues artificially increased its starting OD readings, leading to a poor model fit. 
 
@@ -252,7 +254,7 @@ d_gc <-  d_gc [-grep(pattern = "thiacloprid-1-6", x = d_gc$sample), ]
 
 ```
 
-Best option is to have three independent variables: concentration (factor), insecticide (factor) and day (factor) and one dependent variable: AUC (continuous dependent). AUC = concentration + pesticide + day + (pesticide x concentration) (interaction).  pesticide x concentration interaction is the interesting term. Use a linear mixed model with day as a randome effect. To do this the data has to be reformatted so there are columns with concentration, day and insecticide. At this point sulfoxaflor and cypermethrin were removed due to evaporation and solubility issues respectively. 
+Best option is to have three independent variables: concentration (factor), insecticide (factor) and day (factor) and one dependent variable: AUC (continuous dependent). AUC = concentration + pesticide + day + (pesticide x concentration) (interaction).  pesticide x concentration interaction is the interesting term. Use a linear mixed model with day as a random effect. To do this the data has to be reformatted so there are columns with concentration, day and insecticide. At this point sulfoxaflor and cypermethrin were removed due to evaporation and solubility issues respectively. 
 
 ```{r}
 aucl_formatting_function <- function(growthcurver_data, aucl_or_r) {
@@ -446,14 +448,9 @@ model_df_controls_zero <- rbind(model_df_controls_zero, only_controls)
 
 Remember that when you run the chunk above you randomly assign the controls to the insecticides again according to the IBD. See if doing this varies the results. Would show the control assignment does have an effect. Could do because I'm using an incomplete block design.
 
-First option (model_df_controls_zero) is where controls are within control level in insecticide factor and 0 level in concentration factor.
-Second (model_df_assigned_controls) is where controls have been distributed to each insecticide level within insecticde factor and 0 level in concentration factor. Third (model_df_anomalies_removed) is where control is a level within insecticide factor and have been distributed to concentration levels.  
+Controls have been distributed to each insecticide level within insecticide factor and 0 level in concentration factor. 
 
 ```{r}
-# using each dataset as input 
-
-# model_df_anomalies_removed <- model_df_controls_zero
-
 model_df_anomalies_removed <- model_df_assigned_controls
 
 # convert to factor
@@ -464,26 +461,40 @@ model_df_anomalies_removed$concentration <- as.factor(model_df_anomalies_removed
 
 # reorder concentration factor so "0" (control) comes first
 model_df_anomalies_removed$concentration <- relevel(model_df_anomalies_removed$concentration, "0")
-
-# reorder concentration factor so "0" (control) is at the bottom of ordinal variable
-# model_df_anomalies_removed$concentration <- factor(model_df_anomalies_removed$concentration, order = TRUE,
-#                                                    levels = c("0", "0.001", "0.01", "0.1", "1", "5"))
-
-# reorder insecticide factor so control comes first
-# model_df_anomalies_removed$insecticide <- relevel(model_df_anomalies_removed$insecticide, "control")
-
 ```
 
-An important question is what does the intercept of my model represent? For a simple linear regression of a categorical variable with two levels the intercept would be one of the levels, with the other level contrasted to this level. Eg. male and female levels in sex categorical variable in car package salaries example data set ([link](http://www.sthda.com/english/articles/40-regression-analysis/163-regression-with-categorical-variables-dummy-coding-essentials-in-r/#example-of-data-set)). For more complex models like mine this isn't the case. Example on sthda has same issue where it isn't obvious what the intercept relates to. 
-
-Linear mixed model with control as its own level in concentration
+An important question is what does the intercept of my model represent? For a simple linear regression of a categorical variable with two levels the intercept would be one of the levels, with the other level contrasted to this level. Eg. male and female levels in sex categorical variable in car package salaries example data set ([link](http://www.sthda.com/english/articles/40-regression-analysis/163-regression-with-categorical-variables-dummy-coding-essentials-in-r/#example-of-data-set)). For more complex models like mine this isn't the case. For this model the intercept is very similar to acet 0. The reason it isn't exactly the same is because the interaction terms including day are omitted from the model 
 
 ```{r}
-# mixed.lmer_1 <- lmer(auc_l ~ concentration + insecticide + concentration*insecticide + (1|day), data = model_df_anomalies_removed)
+acet <- model_df_anomalies_removed [grep(pattern = "acetamiprid", x = model_df_anomalies_removed$insecticide), ]
+acet_0 <- acet [grep(pattern = "^0$", x = acet$concentration), ]
+mean(acet_0$auc_l)
+```
 
-# summary(mixed.lmer_1)
-  
-mixed.lmer <- lmer(auc_l ~ insecticide + concentration + insecticide*concentration + (1|day), data = model_df_anomalies_removed)
+The above figure is close to intercept term of model. How to interpret the model output? My model has two fixed explanatory factor variables. To calculate the estimated mean of chlorpyrifos_1 from the model summary= 675.999 (Intercept) + 30.403 (chlorpyrifos) + 36.593 (concentration1) - 96.057 (insecticidechlorpyrifos:concentration1) = 646.9381. This is the same as if we calculated the actual mean! (Update to change values automatically)
+
+Another example is Thiacloprid 5. model summary= 675.999 (Intercept) + 4.763 (thiacloprid) + 36.593 (concentration5) - 96.057 (insecticidethiacloprid:concentration5) = 407.544. This is (basically) the same as if we calculated the actual mean! 
+
+The thiacloprid value is only applicable alone to concentration 0 without the interaction term. Likewise, the concentration5 value is only relevant alone to insecticide acetamiprid. Eg, to find the estimated mean of acetamiprid 5 = Intercept + concentration 5. To find the estimated mean of thiacloprid 0 = Intercept + thiacloprid. Therefore, concentration 5 shows the difference between the estimated means of acetamiprid 0 and acetamiprid 5 and thiacloprid row shows the difference between estimated means of acetamiprid 0 and thiacloprid 0. The difference between the estimated means of acetamiprid 0 and thiacloprid 5 = thiacloprid + concentration 5 + concentration5:insecticidethiacloprid. This shows the effects of concentration depends on insecticide, and the effects of insecticide depend on concentration. 
+
+My analysis shows there is an interaction between insecticide thiacloprid and concentration 5. It doesn't test the difference between acet-0 and thia-5 per se.
+
+When the insecticide is thiacloprid the AUC decreases substantially with concentration such that concentration 5 observations are substantially lower than those from concentration 0.
+
+For a refresher on interpreting models with two factors go to Knell's Linear models 4: Multi-factor ANOVA - Interpretation section of his tutorials. 
+
+```{r}
+chlor <- model_df_anomalies_removed [grep(pattern = "chlorpyrifos", x = model_df_anomalies_removed$insecticide), ]
+chlor_1 <- chlor [grep(pattern = "^1$", x = chlor$concentration), ]
+mean(chlor_1$auc_l)
+
+thia <- model_df_anomalies_removed [grep(pattern = "thiacloprid", x = model_df_anomalies_removed$insecticide), ]
+thia_5 <- thia [grep(pattern = "^5$", x = thia$concentration), ]
+mean(thia_5$auc_l)
+```
+
+```{r}
+mixed.lmer <- lmer(auc_l ~ concentration * insecticide + (1|day), data = model_df_anomalies_removed)
 
 summary(mixed.lmer)
 
@@ -530,7 +541,7 @@ transformed_data$auc_l <- 1000 - transformed_data$auc_l
 
 transformed_data$auc_l <- log10(transformed_data$auc_l)
 
-mixed.lmer_trans <- lmer(auc_l ~ insecticide + concentration + insecticide*concentration + (1|day), data = transformed_data)
+mixed.lmer_trans <- lmer(auc_l ~ concentration * insecticide + (1|day), data = transformed_data)
 
 summary(mixed.lmer_trans)
 
@@ -541,9 +552,9 @@ qqnorm(resid(mixed.lmer_trans))
 qqline(resid(mixed.lmer_trans))
 
 # model and term significance.
-full.lmer_trans <- lmer(auc_l ~ insecticide + concentration + (insecticide*concentration) + (1|day), data = transformed_data, REML = FALSE)
+full.lmer_trans <- lmer(auc_l ~ concentration * insecticide + (1|day), data = transformed_data, REML = FALSE)
 
-reduced.lmer_trans <- lmer(auc_l ~ insecticide + concentration + (1|day), data = transformed_data, REML = FALSE)
+reduced.lmer_trans <- lmer(auc_l ~ concentration + insecticide + (1|day), data = transformed_data, REML = FALSE)
 
 anova(reduced.lmer_trans, full.lmer_trans) 
 
@@ -565,14 +576,7 @@ plot(density, main = "Residuals Distribution")
 plot(trans_density, main = "Log Transformed Residuals Distribution")
 ```
 
-Model residuals look closer to a normal distribution and shapiro wilks test now fails. 18% chance of observing this result if the model residuals were normally distributed.
-
-```{r}
-layout(matrix(c(1,1,2,3), 2, 2, byrow = TRUE))
-
-# homogeneity of variance
-plot(trans_insect_conc_day_model,c(1,2,5))
-```
+Model residuals look closer to a normal distribution and shapiro wilks test now fails. 10% chance of observing this result if the model residuals were normally distributed.
 
 Interaction between thiacloprid and concentration is still significant. 
 

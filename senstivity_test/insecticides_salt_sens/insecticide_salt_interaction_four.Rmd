@@ -369,6 +369,13 @@ aucl_treatment_model <- lm(auc_l ~ (salt * treatment), data = sample_aucl)
 summary(aucl_treatment_model)
 ```
 
+```{r}
+control <- sample_aucl [grep(pattern = "control", x = sample_aucl$insecticide), ]
+control_salt <- control [grep(pattern = "^FALSE$", x = control$salt), ]
+mean(control_salt$auc_l)
+```
+
+
 Day has no effect this time so has been left out of the model. 
 
 Test assumptions of linear regression. In the model output above, the significance value for the intercept is testing whether the intercept is significantly different from zero. Rather useless in this situation. 
