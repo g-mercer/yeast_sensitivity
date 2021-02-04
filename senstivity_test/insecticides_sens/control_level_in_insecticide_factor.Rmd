@@ -435,15 +435,6 @@ model_df_assigned_controls <- model_df_assigned_controls [-grep(pattern = "contr
 only_controls$concentration <- "0"
 
 model_df_assigned_controls <- rbind(model_df_assigned_controls, only_controls)
-
-# create a dataframe where standard df has controls as insecticide level and conc of 0
-only_controls <- model_df_anomalies_removed [grep(pattern = "control", x = model_df_anomalies_removed$sample), ]
-
-model_df_controls_zero <- model_df_anomalies_removed [-grep(pattern = "control", x = model_df_anomalies_removed$sample), ]
-
-only_controls$concentration <- "0"
-
-model_df_controls_zero <- rbind(model_df_controls_zero, only_controls)
 ```
 
 Remember that when you run the chunk above you randomly assign the controls to the insecticides again according to the IBD. See if doing this varies the results. Would show the control assignment does have an effect. Could do because I'm using an incomplete block design.
@@ -451,9 +442,11 @@ Remember that when you run the chunk above you randomly assign the controls to t
 Controls have been distributed to each insecticide level within insecticide factor and 0 level in concentration factor. 
 
 ```{r}
+concs_own_level <- model_df_anomalies_removed
+
 model_df_anomalies_removed <- model_df_assigned_controls
 
-# convert to factor
+# convert insecticide to factor
 model_df_anomalies_removed$insecticide <- as.factor(model_df_anomalies_removed$insecticide)
 
 # convert concentration to factor
@@ -461,6 +454,10 @@ model_df_anomalies_removed$concentration <- as.factor(model_df_anomalies_removed
 
 # reorder concentration factor so "0" (control) comes first
 model_df_anomalies_removed$concentration <- relevel(model_df_anomalies_removed$concentration, "0")
+
+# reorder insecticide factor so tefluthrin comes first. Chosen because there is no effect at any concentration. Change to acetamiprid. 
+model_df_anomalies_removed$insecticide <- relevel(model_df_anomalies_removed$insecticide, "tefluthrin")
+
 ```
 
 An important question is what does the intercept of my model represent? For a simple linear regression of a categorical variable with two levels the intercept would be one of the levels, with the other level contrasted to this level. Eg. male and female levels in sex categorical variable in car package salaries example data set ([link](http://www.sthda.com/english/articles/40-regression-analysis/163-regression-with-categorical-variables-dummy-coding-essentials-in-r/#example-of-data-set)). For more complex models like mine this isn't the case. For this model the intercept is very similar to acet 0. The reason it isn't exactly the same is because the interaction terms including day are omitted from the model 
@@ -475,7 +472,7 @@ The above figure is close to intercept term of model. How to interpret the model
 
 Another example is Thiacloprid 5. model summary= 675.999 (Intercept) + 4.763 (thiacloprid) + 36.593 (concentration5) - 96.057 (insecticidethiacloprid:concentration5) = 407.544. This is (basically) the same as if we calculated the actual mean! 
 
-The thiacloprid value is only applicable alone to concentration 0 without the interaction term. Likewise, the concentration5 value is only relevant alone to insecticide acetamiprid. Eg, to find the estimated mean of acetamiprid 5 = Intercept + concentration 5. To find the estimated mean of thiacloprid 0 = Intercept + thiacloprid. Therefore, concentration 5 shows the difference between the estimated means of acetamiprid 0 and acetamiprid 5 and thiacloprid row shows the difference between estimated means of acetamiprid 0 and thiacloprid 0. The difference between the estimated means of acetamiprid 0 and thiacloprid 5 = thiacloprid + concentration 5 + concentration5:insecticidethiacloprid. This shows the effects of concentration depends on insecticide, and the effects of insecticide depend on concentration. 
+The thiacloprid value is only applicable alone to concentration 0 without the interaction term. Likewise, the concentration5 value is only relevant alone to insecticide acetamiprid. Eg, to find the estimated mean of acetamiprid 5 = Intercept + concentration 5. To find the estimated mean of thiacloprid 0 = Intercept + thiacloprid. Therefore, concentration 5 shows the difference between the estimated means of acetamiprid 0 and acetamiprid 5 and thiacloprid row shows the difference between estimated means of acetamiprid 0 and thiacloprid 0. The difference between the estimated means of acetamiprid 0 and thiacloprid 5 = thiacloprid + concentration 5 + concentration5:insecticidethiacloprid. This shows the effects of concentration depends on insecticide, or the effects of insecticide depend on concentration. 
 
 My analysis shows there is an interaction between insecticide thiacloprid and concentration 5. It doesn't test the difference between acet-0 and thia-5 per se.
 
@@ -483,9 +480,21 @@ When the insecticide is thiacloprid the AUC decreases substantially with concent
 
 For a refresher on interpreting models with two factors go to Knell's Linear models 4: Multi-factor ANOVA - Interpretation section of his tutorials. 
 
+My problem with this approach is the interaction term values are relative to the reference levels. For example,
+
+estimated mean of thia-5 = intercept + conc_5 + thia + conc_5:thia
+
+conc_5 = the effect of conc_5 on growth for acet (relative to acet-0) if acet is the reference insecticide level. 
+
+thia = effect of thia on growth for conc_0 (relative to acet-0). 
+
+Of the two contrasts above thia doesn't matter because there shouldn't be any significant difference between thia-0 and acet-0. However, if there is an effect for conc_5 on growth for acet the interaction term for conc_5:thia has to take this into account (because the interaction term value is modifying the separate effects of conc_5 and thia on growth to account for their effect when together) . Therefore, the value of the interaction terms are dependent on the reference levels set. conc_5:thia will alter if acet is the insecticide reference level in comparison to if tefluthrin is (because the effect of conc_5 on acet is different to the effect of conc_5 on teflu). This is especially pronounced for this example (teflu vs acet reference level) because acetamiprid seems to have a proliferative effect at all concentrations. 
+
+In summary, the choice of insecticide reference level alters the values and significance of the interaction terms and I don't like this. 
+
 ```{r}
-chlor <- model_df_anomalies_removed [grep(pattern = "chlorpyrifos", x = model_df_anomalies_removed$insecticide), ]
-chlor_1 <- chlor [grep(pattern = "^1$", x = chlor$concentration), ]
+chlor <- model_df_anomalies_removed [grep(pattern = "imidacloprid", x = model_df_anomalies_removed$insecticide), ]
+chlor_1 <- chlor [grep(pattern = "^0.1$", x = chlor$concentration), ]
 mean(chlor_1$auc_l)
 
 thia <- model_df_anomalies_removed [grep(pattern = "thiacloprid", x = model_df_anomalies_removed$insecticide), ]
@@ -498,6 +507,11 @@ mixed.lmer <- lmer(auc_l ~ concentration * insecticide + (1|day), data = model_d
 
 summary(mixed.lmer)
 
+# make a model without the interaction term to check if an insecticide is having an effect at all concentrations
+mixed.lmer_no_interaction <- lmer(auc_l ~ concentration + insecticide + (1|day), data = model_df_anomalies_removed)
+
+summary(mixed.lmer_no_interaction)
+
 plot(mixed.lmer)
 
 qqnorm(resid(mixed.lmer))
@@ -505,14 +519,17 @@ qqnorm(resid(mixed.lmer))
 qqline(resid(mixed.lmer))
 
 # model and term significance.
-full.lmer <- lmer(auc_l ~ insecticide + concentration + (insecticide*concentration) + (1|day), data = model_df_anomalies_removed, REML = FALSE)
+full.lmer <- lmer(auc_l ~ concentration * insecticide + (1|day), data = model_df_anomalies_removed, REML = FALSE)
 
-reduced.lmer <- lmer(auc_l ~ insecticide + concentration + (1|day), data = model_df_anomalies_removed, REML = FALSE)
+reduced.lmer <- lmer(auc_l ~ concentration + insecticide + (1|day), data = model_df_anomalies_removed, REML = FALSE)
 
 anova(reduced.lmer, full.lmer) 
 
 drop1(full.lmer,test="Chisq")
 ```
+If thiacloprid is made reference level in insecticide factor it can clearly be shown that concentration 5 has a significant effect for the thiacloprid level of the insecticide factor.
+
+Fit the model without the interaction term. Now the rows correspond to the effect of that level, relative to the reference level for the factor, which is the same across all the levels of the other factor. For example, acetamiprid has a significant positive effect on growth relative to tefluthrin, and this applies to all concentrations equally. Or, concentration 5 has a significant negative effect on growth relative to concentration 0, irrespective of the insecticide.  
 
 Remember the myths of linear regression. The dependent variable doesn't need to be normally distributed. The model residuals, however, do. 
 
@@ -540,6 +557,11 @@ transformed_data <- model_df_anomalies_removed
 transformed_data$auc_l <- 1000 - transformed_data$auc_l
 
 transformed_data$auc_l <- log10(transformed_data$auc_l)
+
+# make a model without the interaction term to check if an insecticide is having an effect at all concentrations
+mixed.lmer_no_interaction_trans <- lmer(auc_l ~ concentration + insecticide + (1|day), data = transformed_data)
+
+summary(mixed.lmer_no_interaction_trans)
 
 mixed.lmer_trans <- lmer(auc_l ~ concentration * insecticide + (1|day), data = transformed_data)
 
@@ -582,6 +604,152 @@ Interaction between thiacloprid and concentration is still significant.
 
 I ran the analysis again without Thiacloprid-1-6, the only outlier with a standardised residual > 5. Now my data passes a Shapiro Wilks Test. All this means is "I cannot reject the hypothesis that the model residuals come from a population which has a normal distribution". Due to this vaguery I ran my analysis with and without the observation. The interaction between Thiacloprid and Concentration was significant in comparison to the interaction between Control and Concentration for both. 
 
+Because I'm making so many contrasts in my model I'm not avoiding multiple hypothesis test anyway. Analyse Thiacloprid separately. Makes everything clearer. 
+
+```{r}
+thia_trans <- transformed_data [grep(pattern = "thiacloprid", x = transformed_data$insecticide),]
+
+mixed.lmer_trans_thia <- lmer(auc_l ~ concentration + (1|day), data = thia_trans)
+
+summary(mixed.lmer_trans_thia)
+
+qqnorm(resid(mixed.lmer_trans_thia))
+
+qqline(resid(mixed.lmer_trans_thia))
+
+plot(mixed.lmer_trans_thia)
+
+# plot distribution of model residuals again
+trans_density_thia <- density(resid(mixed.lmer_trans_thia))
+
+plot(trans_density_thia, main = "Log Transformed Residuals Distribution")
+
+trans_shapiro_result_thia <- shapiro_test(resid(mixed.lmer_trans_thia))
+
+trans_shapiro_result_thia
+```
+
+Above I have had concentration as a factor. When concentration is a factor observations must be independent, homogeneity of variance has to be constant and the model residuals have to be normally distributed. This is why I performed the reflection and log transformation. 
+
+To avoid the issue in the above models of the insecticide reference level having an effect on the interaction term values I am going to set concentration as a continuous variable, assign the controls their own level within the insecticide factor and assign each control observation a random concentration. I'm then going to contruct a model with factorial (insecticide) and continuous (concentration) explanatory variables:
+
+AUC = (intercept + insecticide coefficient) + (insecticide:concentration * concentration * CONCENTRATION)
+
+Intercept = control level of insecticide factor
+
+insecticide coefficient = what the intercept has to be modified by for each insecticide. For example, if acetamiprid-0.001 (which will become acet-0 once adjusted) is greater than control-0.001 (which will become control-0 once adjusted) then acet coefficient with add a value to the intercept. This is an additive coefficient.
+
+CONCENTRATION = the adjusted value of concentration (0,1,2,3,3.7)
+
+concentration = The coefficient for the control level of the insecticide factor for concentration. Should be close to 0. This is a multiplicative factor coefficient. Times this by the CONCENTRATION value.  
+
+insecticide:concentration = what the coefficient for the control level of the insecticide factor for concentration has to be modified by to accurately represent the effect on growth of concentration for the respective insecticide. 
+
+What I'm doing is fitting a model that consists of nine lines with different slopes as well as different intercepts. Each line is a level in the insecticide factor. If interaction terms are significant is shows that the slope for the insecticide is significantly different to the control In other words there is a significant dose response for that insecticide. 
+
+In a perfect world I would add 56 more controls and have conc 0,0.001,0.01,0.1,1 and 5 for each insecticide factor. So 48 controls in the control level (all with conc 0) and another 8 controls distributed to the conc 0 levels of each insecticide. Then intercept would be 0 not 0.001. Doesnt matter too much though. I can still see the effect of acetamiprid this way by looking at intercept. 
+
+Now concentration is continuous there needs to be a linear relationship between AUC and conc. Plot AUC vs conc with observations coloured according to insecticide. Is the data positively skewed? Yes so log transform concentration. First x1000 to make 0.001 -> 0. That's better. 
+
+```{r}
+concs_own_level$insecticide <- as.factor(concs_own_level$insecticide)
+
+concs_own_level$insecticide <- relevel(concs_own_level$insecticide, "control")
+
+plot(auc_l ~ concentration, 
+     col = insecticide, 
+     data = concs_own_level,
+     xlab = "concentration (µM)",
+     ylab = "Growth (AUC)")
+
+concs_own_level$concentration <- log10(as.numeric(concs_own_level$concentration) * 1000)
+
+plot(auc_l ~ concentration, 
+     col = insecticide, 
+     data = concs_own_level,
+     xlab = "concentration (µM)",
+     ylab = "Growth (AUC)")
+```
+
+Now make a model so we can investigate model diagnostics.
+
+```{r}
+mixed.lmer_conc_contin <- lmer(auc_l ~ concentration * insecticide + (1|day), data = concs_own_level)
+
+drop1(mixed.lmer_conc_contin, test = "F")
+
+summary(mixed.lmer_conc_contin)
+
+plot(mixed.lmer_conc_contin)
+
+qqnorm(resid(mixed.lmer_conc_contin))
+
+qqline(resid(mixed.lmer_conc_contin))
+
+```
+
+Make a model without the interaction term
+
+```{r}
+mixed.lmer_conc_contin_no_int <- lmer(auc_l ~ concentration + insecticide + (1|day), data = concs_own_level)
+
+drop1(mixed.lmer_conc_contin_no_int, test = "F")
+
+summary(mixed.lmer_conc_contin_no_int)
+
+plot(mixed.lmer_conc_contin_no_int)
+
+qqnorm(resid(mixed.lmer_conc_contin_no_int))
+
+qqline(resid(mixed.lmer_conc_contin_no_int))
+
+```
+
+Need to do transformation (reflection and log of AUC) again.
+
+```{r}
+concs_own_level_trans <- concs_own_level
+
+# makes auc_l positively skewed
+concs_own_level_trans$auc_l <- 1000 - concs_own_level_trans$auc_l
+
+concs_own_level_trans$auc_l <- log10(concs_own_level_trans$auc_l)
+
+mixed.lmer_conc_contin_trans <- lmer(auc_l ~ concentration * insecticide + (1|day), data = concs_own_level_trans)
+
+drop1(mixed.lmer_conc_contin_trans, test = "F")
+
+summary(mixed.lmer_conc_contin_trans)
+
+plot(mixed.lmer_conc_contin_trans)
+
+qqnorm(resid(mixed.lmer_conc_contin_trans))
+
+qqline(resid(mixed.lmer_conc_contin_trans))
+
+conc_contin_trans_shapiro_result <- shapiro_test(resid(mixed.lmer_conc_contin_trans))
+
+conc_contin_trans_shapiro_result
+```
+
+Let's visualise this model.
+
+```{r}
+p1 <- ggplot(data = concs_own_level_trans) +  # which data frame to use
+  aes(x = concentration, y = auc_l, colour = insecticide) + # specify the 'aesthetics'
+  geom_point() + # add layer with points plotted
+  geom_smooth(method= "lm", se = FALSE) + # add lines  <<- is this right?
+  scale_color_brewer(palette = "Paired") + # use the viridis palette
+  theme_bw() + # use a better theme than the nasty default one
+  labs(x = "concentration (µM)", y = "Growth (AUC)") + # axis labels
+  scale_y_reverse() # reverse scales to make interpretation more intuitive
+
+p1
+```
+
+Randomly assign controls to each concentration, ensuring one from each day. Create function to do that. 
+
+
 For a visualisation of mean AUC vs concentration for each insecticide (control part of insecticide)
 
 ```{r}
@@ -615,7 +783,7 @@ for (name in 1:length(conditions)) {
 colnames(conditions_stats) <- c("condition", "nbr.val", "nbr.null", "nbr.na", "min", "max", "range", "sum", "median", "mean", "SE.mean", "CI.mean.0.95", "var", "std.dev", "coef.var")
 
 # pull out condition AUC mean and AUC mean CI 95%
-rel_conditions_stats <- conditions_stats [ , c(1, 10, 12)]
+rel_conditions_stats <<- conditions_stats [ , c(1, 10, 12)]
 
 # separate each insecticide
 insecticide_names <- c("acetamiprid", "chlorpyrifos", "clothianidin", "flupyradifurone", "imidacloprid", "malathion", "tefluthrin", "thiacloprid")
