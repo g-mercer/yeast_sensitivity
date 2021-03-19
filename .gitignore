@@ -1,8 +1,6 @@
 .DS_Store
 .RData
 .Rhistory
-senstivity_test/dmso_methanol_sens/tmp/
-senstivity_test/insecticides_sens/tmp/
-senstivity_test/insecticides_salt_sens/tmp/
+senstivity_test/*/tmp/
 ~$*
 .Rproj.user

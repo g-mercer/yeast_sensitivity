@@ -1,0 +1,197 @@
+---
+title: "one_concentration"
+author: "Guy Mercer"
+date: "25/02/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+Machine Settings:
+
+* Number of Cycles - 193
+
+* Cycle Length - 300s
+
+* Wavelength - 600nm
+
+* Temperature - 30°C
+
+* Shake - Before Each Cycle (267s)
+
+* Shake Mode - Double Orbital
+
+* Shake Frequency - 200rpm
+
+* Total Well Volume - 200µl
+
+I combined all the replicates using zsh to output a formatted, compiled csv file called formatted_compiled. I then edited the names of controls and blanks.
+
+```{zsh raw-file-formatting}
+#!/usr/bin/env zsh
+
+# setwd
+cd /Users/guy/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/insecticides_sens
+
+./WHATIDID.sh 
+```
+
+```{r}
+library(tidyverse)
+library(knitr)
+library(growthcurver)
+library(pastecs)
+library(rstatix)
+library(lmerTest)
+library(ggpubr)
+library(broom)
+library(patchwork)
+``` 
+
+```{zsh raw-file-formatting}
+#!/usr/bin/env zsh
+
+# setwd
+cd /Users/guy/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/2_strain
+
+./WHATIDID.sh 
+```
+
+```{r}
+# set wd
+setwd("~/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/insecticides_sens/")
+
+# read csv
+insect_sens <- read.csv(file = "./results/form_comp_corr_blank_cont.csv", header = FALSE, stringsAsFactors = FALSE)
+
+# formatting function
+sens_data_form <- function(sens_data) {
+  # transpose
+  sens_data_trans <- t(sens_data)
+  # save first row as colnames
+  colnames(sens_data_trans) <- sens_data_trans [1, ]
+  # delete first row, which is now duplicate of colnames
+  sens_data_colnames <- sens_data_trans [-1, ]
+  # remove any empty rows. Sometimes created when importing csv file 
+  sens_data_no_blanks <- sens_data_colnames[rowSums(is.na(sens_data_colnames)) != ncol(sens_data_colnames),]
+  # convert matrix into dataframe
+  sens_data_df <- as.data.frame(sens_data_no_blanks)
+  # convert everything to numeric
+  sens_data_df[] <- lapply(sens_data_df, function(x) {
+    if(is.factor(x)) as.numeric(as.character(x)) else x
+  })
+  # convert to data frame
+  sens_data_corr <- as.data.frame(sens_data_df)
+  
+  return(sens_data_corr)
+}
+
+sens_data_corr <- sens_data_form(insect_sens)
+
+# set any negative values to 0
+sens_data_corr[sens_data_corr<0] <- 0
+```
+
+To input the data into Growthcurver I had to alter the formatting. When using Growthcurver, columns have to be looped through individually for a more detailed output. Growth curve data is fitted to the standard form of the logistic equation (sigmoidal).
+
+```{r, include = FALSE}
+growthcurver_function <- function(sens_data_corr) {
+  
+# Let's create an output data frame to store the results in. 
+# We'll create it so that it is the right size (it's faster this way!), 
+# but leave it empty.
+num_analyses <- length(names(sens_data_corr)) - 1
+d_gc <- data.frame(sample = character(num_analyses),
+                   k = numeric(num_analyses),
+                   n0  = numeric(num_analyses),
+                   r = numeric(num_analyses),
+                   r_se = numeric(num_analyses),
+                   r_p = numeric(num_analyses),
+                   t_mid = numeric(num_analyses),
+                   t_gen = numeric(num_analyses),
+                   auc_l = numeric(num_analyses),
+                   auc_e = numeric(num_analyses),
+                   sigma = numeric(num_analyses),
+                   stringsAsFactors = FALSE)
+
+# Now, loop through all of the columns in the data frame. For each column,
+# run Growthcurver, save the most useful metrics in the output data frame,
+# and make a plot of all the growth curve data and their best fits.
+par(mfcol = c(4,4))
+par(mar = c(1,1,1,1))
+y_lim_max <- max(sens_data_corr[,setdiff(names(sens_data_corr), "time")]) - min(sens_data_corr[,setdiff(names(sens_data_corr), "time")])
+
+n <- 1    # keeps track of the current row in the output data frame
+for (col_name in names(sens_data_corr)) {
+  
+  # Don't process the column called "time". 
+  # It contains time and not absorbance data.
+  if (col_name != "time") {
+    
+    # Create a temporary data frame that contains just the time and current col
+    sens_data_corr_loop <- sens_data_corr[, c("time", col_name)]
+    
+    # Now, call Growthcurver to calculate the metrics using SummarizeGrowth
+    gc_fit <- SummarizeGrowth(data_t = sens_data_corr_loop[, "time"], 
+                              data_n = sens_data_corr_loop[, col_name],
+                              bg_correct = "none")
+    
+    # Now, add the metrics from this column to the next row (n) in the 
+    # output data frame, and increment the row counter (n)
+    d_gc$sample[n] <- col_name
+    d_gc[n, 2:11] <- c(gc_fit$vals$k,
+                       gc_fit$vals$n0,
+                       gc_fit$vals$r,
+                       gc_fit$vals$r_se,
+                       gc_fit$vals$r_p,
+                       gc_fit$vals$t_mid,
+                       gc_fit$vals$t_gen,
+                       gc_fit$vals$auc_l,
+                       gc_fit$vals$auc_e,
+                       gc_fit$vals$sigma)
+    n <- n + 1
+    
+    # Finally, plot the raw data and the fitted curve
+    n_obs <- length(gc_fit$data$t)
+    plot(gc_fit$data$t, gc_fit$data$N, 
+         pch = 20, 
+         xlim = c(0, 960), 
+         ylim = c(0, y_lim_max),
+         cex = 0.6, xaxt = "n", yaxt = "n")
+    text(x = 960 / 2, y = y_lim_max, labels = col_name, pos = 1)
+    lines(gc_fit$data$t, predict(gc_fit$model),col = "red")
+  }
+}
+
+# Uncomment the next line to save the plots from your 96-well plate to a file
+# dev.off()
+
+return(d_gc)
+
+}
+
+d_gc <- growthcurver_function(sens_data_corr = sens_data_corr)
+```
+
+There is something odd about sens_data_corr. When passing it to d_gc the replicate growth curves are no longer plotted. If, however, I I set replicates_of_interest <- colnames(sens_data_corr) below. Then the individual plots are output. Even though on the surface replicates_of_interest_df is the same as sens_data_corr????
+
+```{r}
+replicates_of_interest <- colnames(sens_data_corr)
+  
+replicates_of_interest_df <- tibble(matrix(nrow=nrow(sens_data_corr)))
+
+for (sample in 1:length(replicates_of_interest)) {
+  
+  replicate_col <- sens_data_corr [ , grep(pattern = replicates_of_interest [sample], x = names(sens_data_corr))]
+  
+  replicates_of_interest_df [ , sample] <- replicate_col
+  
+}
+
+colnames(replicates_of_interest_df) <- replicates_of_interest 
+
+replicates_of_interest_curves <- growthcurver_function(sens_data_corr = replicates_of_interest_df)
+
+```

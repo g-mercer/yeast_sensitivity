@@ -1068,11 +1068,12 @@ for (insecticide in 1:length(by_insecticide_dfs)) {
   
   df <- by_insecticide_dfs[[insecticide]]
 
-  drc <- ggplot(df, aes(x=concentration,y=auc_l, color=day)) +
+  drc <- ggplot(df, aes(x=concentration, y=auc_l, color=day)) +
     geom_point() +
     geom_line() +
+    # need to change concentration to numeric
     scale_x_log10(breaks = trans_breaks("log10", function(x) 10^x),
-                  labels = trans_format("log10", math_format(10^.x))) +    ylim(0, 1500) +
+                  labels = trans_format("log10", math_format(10^.x))) + ylim(0, 1500) +
     ggtitle(title) +
     labs(x="", y="") +
     theme(panel.background = element_rect(fill = "white"), axis.line = element_line(), axis.title = element_text(size = 10),
@@ -1081,6 +1082,7 @@ for (insecticide in 1:length(by_insecticide_dfs)) {
   plot_list [[insecticide]] <- drc
 
 }
+
 add_global_label((wrap_plots(plot_list)),
                  Ylab = "AUC", Xlab = "Concentration") + plot_layout(guides = "collect")
 ```
@@ -1140,3 +1142,4 @@ drop1(full.lmer,test="Chisq")
 
 
 ```
+The easiest way to avoid the issues associated with looking at the interaction terms is to look only at the 5mM concentration observations. Then all I have is one fixed factor. 
