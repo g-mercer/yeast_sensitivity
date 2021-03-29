@@ -33,7 +33,7 @@ I combined all the replicates using zsh to output a formatted, compiled csv file
 #!/usr/bin/env zsh
 
 # setwd
-cd /Users/guy/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/insecticides_sens
+cd /Users/guy/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/2_strain
 
 ./WHATIDID.sh 
 ```
@@ -48,23 +48,15 @@ library(lmerTest)
 library(ggpubr)
 library(broom)
 library(patchwork)
+library(boot)
 ``` 
-
-```{zsh raw-file-formatting}
-#!/usr/bin/env zsh
-
-# setwd
-cd /Users/guy/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/2_strain
-
-./WHATIDID.sh 
-```
 
 ```{r}
 # set wd
-setwd("~/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/insecticides_sens/")
+setwd("~/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/2_strain/")
 
 # read csv
-insect_sens <- read.csv(file = "./results/form_comp_corr_blank_cont.csv", header = FALSE, stringsAsFactors = FALSE)
+insect_sens <- read.csv(file = "./results/formatted_compiled.csv", header = FALSE, stringsAsFactors = FALSE)
 
 # formatting function
 sens_data_form <- function(sens_data) {
@@ -84,6 +76,17 @@ sens_data_form <- function(sens_data) {
   })
   # convert to data frame
   sens_data_corr <- as.data.frame(sens_data_df)
+  # separate blanks
+  blanks <- sens_data_corr [, grep(pattern = "blank", x = colnames(sens_data_corr))]
+  # remove blanks
+  sens_data_corr <- sens_data_corr [, -grep(pattern = "blank", x = colnames(sens_data_corr))]
+  # take mean of each row
+  blanks_mean <- rowMeans(blanks)
+  # correct for blank
+  sens_data_corr <- sens_data_corr [, -1] - blanks_mean
+  # add time again
+  time <- seq(0, 960, by = 5)
+  sens_data_corr <- cbind(as.data.frame(time), sens_data_corr)
   
   return(sens_data_corr)
 }
@@ -92,9 +95,17 @@ sens_data_corr <- sens_data_form(insect_sens)
 
 # set any negative values to 0
 sens_data_corr[sens_data_corr<0] <- 0
+
 ```
 
 To input the data into Growthcurver I had to alter the formatting. When using Growthcurver, columns have to be looped through individually for a more detailed output. Growth curve data is fitted to the standard form of the logistic equation (sigmoidal).
+
+I know thia-pdr-2.2 returns 0 for everything and stops the function from progressing. Therefore, I am removing it as this stage (as it would be removed later as it isn't the median value of it technical replicate trio. This is why I performed technical replicates. 
+
+```{r}
+sens_data_corr <- sens_data_corr [, -grep(pattern = "thiacloprid-pdr-2.2", x = colnames(sens_data_corr))]
+```
+
 
 ```{r, include = FALSE}
 growthcurver_function <- function(sens_data_corr) {
@@ -119,7 +130,7 @@ d_gc <- data.frame(sample = character(num_analyses),
 # Now, loop through all of the columns in the data frame. For each column,
 # run Growthcurver, save the most useful metrics in the output data frame,
 # and make a plot of all the growth curve data and their best fits.
-par(mfcol = c(4,4))
+par(mfrow = c(2,2))
 par(mar = c(1,1,1,1))
 y_lim_max <- max(sens_data_corr[,setdiff(names(sens_data_corr), "time")]) - min(sens_data_corr[,setdiff(names(sens_data_corr), "time")])
 
@@ -153,15 +164,17 @@ for (col_name in names(sens_data_corr)) {
                        gc_fit$vals$sigma)
     n <- n + 1
     
+    
     # Finally, plot the raw data and the fitted curve
     n_obs <- length(gc_fit$data$t)
     plot(gc_fit$data$t, gc_fit$data$N, 
-         pch = 20, 
-         xlim = c(0, 960), 
-         ylim = c(0, y_lim_max),
-         cex = 0.6, xaxt = "n", yaxt = "n")
+      pch = 20, 
+      xlim = c(0, 960), 
+      ylim = c(0, y_lim_max),
+      cex = 0.6, xaxt = "n", yaxt = "n")
     text(x = 960 / 2, y = y_lim_max, labels = col_name, pos = 1)
     lines(gc_fit$data$t, predict(gc_fit$model),col = "red")
+
   }
 }
 
@@ -175,23 +188,305 @@ return(d_gc)
 d_gc <- growthcurver_function(sens_data_corr = sens_data_corr)
 ```
 
-There is something odd about sens_data_corr. When passing it to d_gc the replicate growth curves are no longer plotted. If, however, I I set replicates_of_interest <- colnames(sens_data_corr) below. Then the individual plots are output. Even though on the surface replicates_of_interest_df is the same as sens_data_corr????
+I didn't actually perform a control positive in the end. All they are is 100µl of yeast stock. Quite cool because they show how half the volume really affects the smoothness of the curve. Remove them. Also, one of the thiacloprid is coming back as 0 for everything. This is causing the plotting part of the growthcurver function to fail. The readings performed on the same day are technical replicates so let's select the median value based on auc_l
+
+```{r, include = FALSE}
+# remove control-pos
+d_gc <- d_gc [-grep(pattern = "control-pos", x = d_gc$sample), ]
+
+# Show the top 50 samples with the largest sigma value 
+# (with the worst model fit to the growth curve data)
+high_sigma <- d_gc %>% top_n(50, sigma) %>% arrange(desc(sigma))
+
+# look at some of top 50 sigma observations
+high_sigma_obser <- c("time", high_sigma$sample)
+
+high_sigma_obser_df <- matrix(0, nrow = 193, ncol = length(high_sigma_obser))
+
+for (i in 1:length(high_sigma_obser)) {
+  
+  only <- paste0("^", high_sigma_obser [i], "$", sep = "")
+  
+  high_sigma_plots <- sens_data_corr [, grep(pattern = only, x = colnames(sens_data_corr))]
+
+  high_sigma_obser_df [, i] <- high_sigma_plots
+}
+
+colnames(high_sigma_obser_df) <- high_sigma_obser
+
+high_sigma_obser_df <- as.data.frame(high_sigma_obser_df)
+
+growthcurver_function(sens_data_corr = high_sigma_obser_df)
+```
+
+Highlight growthcurver_function(sens_data_corr = high_sigma_obser_df) and run to see graphs. These are the poorest fits to the logistic regression and none by visual inspection look particularly worrying. Perform a pca on all the data. Save as a pdf to get a proper look at it. All the thiacloprid pdr observations don't cluster with the main group but that's no surprise. Decide not to remove anything as there are no obvious outliers. 
 
 ```{r}
-replicates_of_interest <- colnames(sens_data_corr)
-  
-replicates_of_interest_df <- tibble(matrix(nrow=nrow(sens_data_corr)))
+pca_gc_out <- as_tibble(d_gc) 
 
-for (sample in 1:length(replicates_of_interest)) {
+# Prepare the gc_out data for the PCA
+rownames(pca_gc_out) <- pca_gc_out$sample
+
+# Do the PCA
+pca.res <- prcomp(pca_gc_out %>% select(k:sigma), center=TRUE, scale=TRUE)
+
+pdf(file="results/pca.pdf") 
+# Plot the results
+as_tibble(list(PC1=pca.res$x[,1],
+                   PC2=pca.res$x[,2],
+                   samples = rownames(pca_gc_out))) %>% 
+  ggplot(aes(x=PC1,y=PC2, label=samples)) + 
+geom_text(size = 1)
+dev.off()
+```
+
+Next, split the data in groups of technical replicates, choose only the median and recombine. 
+
+```{r}
+# grab only names without a .
+dotless <- d_gc$sample [grep(pattern = "^([[:alpha:]]+-){1,}[[:digit:]]+$", x = d_gc$sample)]
+
+# take only sample name and auc_l from d_gc
+total_growth <- as.data.frame(cbind(d_gc$sample, d_gc$auc_l))
+colnames(total_growth) <- c("sample", "auc_l")
+total_growth$auc_l <- as.numeric(as.character(total_growth$auc_l))
+
+# separate technical replicates into their own groups in a list
+tech_rep_list <- list()
+
+for (i in 1:length(dotless)) {
   
-  replicate_col <- sens_data_corr [ , grep(pattern = replicates_of_interest [sample], x = names(sens_data_corr))]
-  
-  replicates_of_interest_df [ , sample] <- replicate_col
+  technical_replicates <- total_growth [grep(pattern = dotless [i] , x = d_gc$sample) ,]
+
+  tech_rep_list [[i]] <- technical_replicates
   
 }
 
-colnames(replicates_of_interest_df) <- replicates_of_interest 
+# calculate the median for each group of technical replicates in the list
+auc_l <- sapply(tech_rep_list, function(x){
+  
+  auc_l <- x [, 2]
+  
+  median <- mean(auc_l)
+  
+  return(median)
+})
 
-replicates_of_interest_curves <- growthcurver_function(sens_data_corr = replicates_of_interest_df)
+# combine median with technical replicate group name
+data_for_stats <- as.data.frame(cbind(dotless,auc_l))
+data_for_stats$dotless <- as.character(data_for_stats$dotless)
+data_for_stats$auc_l <- as.numeric(as.character(data_for_stats$auc_l))
+```
+
+This data is now ready almost ready for analysis. Next I need to add relevant columns for insecticide and strain fixed effects and day random effect
+
+```{r}
+# get only controls
+dotlesss <- data_for_stats [grep(pattern = "^([[:alpha:]]+-){3,4}[[:digit:]]+$", x = data_for_stats$dotless), ]
+
+# delete controls from df
+data_for_stats <- data_for_stats [-grep(pattern = "^([[:alpha:]]+-){3,4}[[:digit:]]+$", x = data_for_stats$dotless), ]
+
+# specify where I want to change
+name_corrections <- c("l-n", "o-s")
+
+# remove - by looping through the position that need changing and putting a gsub within a gsub to specify the change i want to make
+for (i in 1:length(name_corrections)){
+  
+  dotlesss$dotless <- gsub(name_corrections [i], gsub("-","", name_corrections [i]), dotlesss$dotless)
+  
+}
+
+# reassociate renamed rows with df
+data_for_stats <- rbind(data_for_stats,dotlesss)
+
+
+# split names of samples by - and then saves these are their own columns. 
+by_column_name <- tibble()
+
+for (i in 1:nrow(data_for_stats)){
+  
+  split <- strsplit(data_for_stats [i, 1], split = "-")
+  
+  by_column_name [i, 1] <- split [[1]] [1]
+  
+  by_column_name [i, 2] <- split [[1]] [2]
+  
+  by_column_name [i, 3] <- split [[1]] [3]
+}
+
+data_for_stats <- cbind(data_for_stats, by_column_name)
+
+colnames(data_for_stats) <- c("sample", "auc_l", "insecticide", "strain", "day")
+
+# make insecticide factor and reorder
+data_for_stats$insecticide <- as.factor(data_for_stats$insecticide)
+data_for_stats$insecticide <- relevel(data_for_stats$insecticide, "controlneg")
+
+# make strain and day factor
+data_for_stats$strain <- as.factor(data_for_stats$strain)
+data_for_stats$day <- as.factor(data_for_stats$day)
 
 ```
+
+Begin statistical analysis. Construct a linear mixed model. Check there is homogeneity of variance and residuals are normally distributed. 
+
+```{r}
+mixed_model <- lmer(auc_l ~ insecticide * strain + (1|day), data = data_for_stats)
+
+summary(mixed_model)
+
+plot(mixed_model)
+
+qqnorm(resid(mixed_model))
+
+qqline(resid(mixed_model))
+
+plot(density(resid(mixed_model)))
+```
+
+```{r}
+# residual variance explained by day. 
+(7555/(7555+2953))*100
+```
+
+The difference between day explains 71.9%% of the variance left over after the variance explained by our fixed effects. 
+
+Test Model Significance
+
+```{r}
+# model and term significance.
+full.lmer <- lmer(auc_l ~ insecticide * strain + (1|day), data = data_for_stats, REML = FALSE)
+
+reduced.lmer <- lmer(auc_l ~ insecticide + strain + (1|day), data = data_for_stats, REML = FALSE)
+
+anova(reduced.lmer, full.lmer) 
+
+drop1(full.lmer,test="Chisq")
+```
+
+For each group I want to calculate a CI. This isn't easy because my sample size is only 7 so I can't accurately determine if my groups are normally distributed. Therefore, I have to perform non parametric bootstrapping. 
+
+```{r}
+# boot function for boot. Indices have to be specified to allow sampling with replacement.
+boot_function <- function(data, indices) {
+  
+  d <- data [indices]
+  
+  mean <- mean(d)
+  
+  return(mean)
+  
+}
+
+# split all my data into respective groups
+group_names <- sub("-[[:digit:]]", "", data_for_stats$sample) %>% unique()
+
+list_of_groups <- list()
+
+for (i in 1:length(group_names)) {
+  
+  group <- data_for_stats [ grep(pattern = group_names [i], x = data_for_stats$sample),]
+  
+  aucl_only <- group$auc_l
+  
+  list_of_groups [[i]] <- aucl_only
+  
+}
+
+names(list_of_groups) <- group_names
+
+boot_list <- lapply(list_of_groups, function(x) {
+  
+  boot(data = x, statistic = boot_function, R = 1000)
+  
+})
+
+names(boot_list) <- group_names
+
+
+ci_list <- lapply(boot_list, function(x) {
+  
+  boot.ci(x, conf = 0.95, type = "basic")
+  
+})
+
+names(ci_list) <- group_names
+
+# save the group name, mean, lower and upper 95% confidence interval in one dataframe.
+ci_df <- matrix(0, 20, 4)
+
+for (i in 1:length(ci_list)) {
+  
+  group_row <- c(names(ci_list) [i], ci_list [[i]] $t0, ci_list [[i]] $basic [c(4,5)])
+  
+  ci_df [i, ] <- t(group_row)
+  
+}
+
+colnames(ci_df) <- c("group", "mean", "lower", "upper")
+```
+
+Next is do pairwise comparisons of my choice. Control solvent vs everything else for each strain. Below is the right package but wrong implementation.
+
+```{r}
+# the easiest way would be to split the data by strain and analyse it separately. All the predicted values are the same. 
+strains <- c("-by-", "-pdr-")
+
+strains_separate <- list()
+
+for (i in 1:length(strains)) {
+  
+  strain <- data_for_stats [grep(pattern = strains [i], x = data_for_stats$sample), ]
+  
+  strains_separate [[i]] <- strain
+  
+} 
+
+# for by
+by <- strains_separate [[1]]
+
+by_model <- lmer(auc_l ~ insecticide + (1|day), data = by)
+  
+summary(by_model)
+
+plot(by_model)
+
+qqnorm(resid(by_model))
+
+qqline(resid(by_model))
+
+# for pdr
+pdr <- strains_separate [[2]]
+
+pdr_model <- lmer(auc_l ~ insecticide + (1|day), data = pdr)
+  
+summary(pdr_model)
+
+plot(pdr_model)
+
+qqnorm(resid(pdr_model))
+
+qqline(resid(pdr_model))
+```
+
+How would I FDR correct. Effectively I have performed 9 hypothesis tests twice. So should I isolate them, rank and perform fdr. Feels wrong. 
+Practice for performing fdr correction. 
+
+```{r}
+p <- summary(mixed_model) [[10]] [,5]
+
+fdr <- p.adjust(p, method = "fdr", n = length(p))
+
+p_values <- cbind(p,fdr)
+```
+
+Publication Plots using knell code. 
+
+```{r}
+# not the publication plot. 
+boxplot(auc_l ~ insecticide*strain ,data = data_for_stats, las=2, notch = FALSE, xlab="")
+
+```
+
+Before getting carried away with any of these results remember that 1mM thiacloprid = 253ppm or 253000ppb....at least 3 orders of magnitude higher than a field realistic dose. For checking if t distributions can be used for CIs look at distribution of each group separately. 

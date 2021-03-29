@@ -167,7 +167,7 @@ return(d_gc)
 d_gc <- growthcurver_function(sens_data_corr = sens_data_corr)
 ```
 
-There is something odd about sens_data_corr. When passing it to d_gc the replicate growth curves are no longer plotted. If, however, I set replicates_of_interest <- colnames(sens_data_corr) below. Then the individual plots are output. Even so on the surface replicates_of_interest_df is the same as sens_data_corr????
+There is something odd about sens_data_corr. When passing it to d_gc the replicate growth curves are no longer plotted. If, however, I set replicates_of_interest <- colnames(sens_data_corr) below. Then the individual plots are output. Even so on the surface replicates_of_interest_df is the same as sens_data_corr???? No there isn't. The plot output is set to only take 16. 
 
 ```{r}
 # replicates_of_interest <- colnames(sens_data_corr)

@@ -1,0 +1,93 @@
+---
+title: "drc"
+author: "Guy Mercer"
+date: "29/03/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+Load Packages
+
+```{r}
+library(tidyverse)
+```
+
+
+Import plate keys and raw files
+
+```{r}
+# import plate keys and raw files
+raw_files_list <- list()
+
+plate_key_list <- list()
+
+for (i in 1:length(1:7)) {
+  
+  file_name <- paste0("plate_keys/day_", i, "_key.csv", sep = "")
+  
+  plate_key <- read.csv(file_name)
+  
+  plate_key_list [[i]] <- plate_key
+  
+  file_name <- paste0("input/drc-", i, ".csv", sep = "")
+  
+  raw_file <- read.csv("input/drc-1.csv")
+  
+  raw_files_list [[i]] <- raw_file
+} 
+
+# give each plate key a column of blanks at the end
+plate_key_list <- lapply(plate_key_list, function(x) {
+  
+  blank_col <- cbind(x, rep("blank", times=3))  
+  
+  names(blank_col)[names(blank_col) == 'rep("blank", times = 3)'] <- 'V6'
+  
+  return(blank_col)
+  
+})
+
+# what below does is extract the raw file and associated key, linearises the key file, then replaces the sample names with the correct concentrations. 
+# give this the correct variable names tomorrow
+
+correctly_named_raw_list <- list()
+
+for (i in 1:length(raw_files_list)){
+  
+  test <- raw_files_list [[i]]
+  
+  test1 <- plate_key_list [[i]]
+  
+  test2 <- cbind(plate_key_list [[i]] [1,], plate_key_list [[i]] [2,], plate_key_list [[i]] [3,])
+
+  for (k in 1:length(test2)) {
+  
+    search <- paste0("^Sample X", k, "$", sep = "")
+   
+    test$X.1 <- gsub(pattern = search, replacement = test2 [1,k], x = test$X.1)
+   
+  }
+  
+  correctly_named_raw_list [[i]] <- test
+  
+}
+
+gibbet <- correctly_named_raw_list [[7]] 
+
+```
+export these correctly named files back into input, replacing the existing links????
+
+
+I combined all the replicates using zsh to output a formatted, compiled csv file called formatted_compiled. I then edited the names of controls and blanks.
+
+```{zsh raw-file-formatting}
+#!/usr/bin/env zsh
+
+# setwd
+cd ~/Documents/phd/DEG_yeast_insecticide_expt/dose_response_curve
+
+./WHATIDID.sh 
+``` 
