@@ -451,47 +451,14 @@ qqline(resid(mixed_model_1))
 
 plot(density(resid(mixed_model_1)))
 
-summary(glht(mixed_model_1, linfct=mcp(insecticidestrain="Tukey")))
+# this takes ages to load but shows that the contrasts from the model output are the same as the pairwise comparison Tukey method (appropriate version for mixed models)
+# summary(glht(mixed_model_1, linfct=mcp(insecticidestrain="Tukey")))
 ```
 
-Of course there are loads of unnecessary comparisons going on here so extract the meaningful ones and perform a FDR correction. 
-
-```{r}
-post_hoc_tests <- summary(glht(mixed_model_1, linfct=mcp(insecticidestrain="Tukey")))
-# extract the relevant information. This output matches the mix model contrasts output for all columns (standard error, t stat, p value)
-post_hoc_test_results <- as.data.frame(post_hoc_tests [[10]] [3:6])
-
-# extract relevant columns
-search_terms <- c("- controlneg-pdr", "- controlneg-by")
-
-relevant_comparisons_combined <- tibble()
-  
-for (i in 1:length(search_terms)) {
-  
-  relevant_comparisons <- post_hoc_test_results [grep(pattern = search_terms [i], x = rownames(post_hoc_test_results)), ]
-
-  relevant_comparisons_combined <- rbind(relevant_comparisons_combined, relevant_comparisons)
-}
-
-regex_terms <- c("[[:alpha:]]+-pdr - controlneg-pdr", "[[:alpha:]]+-by - controlneg-by")
-
-final_comparisons <- tibble()
-
-for (i in 1:length(regex_terms)) {
-  
-strain_only <- relevant_comparisons_combined [grep(pattern = regex_terms [i], x = rownames(relevant_comparisons_combined)), ]
-
-final_comparisons <- rbind(final_comparisons, strain_only)
-
-}
-```
-
-P values above have been corrected already (wrong because too many comparisons) and not all the comparisons are the correct way around (control vs x). 
+Below I extract the relevant pairwise comparisons from the mixed model, not the glht summary because they have the same values and they are easier to extract and handle from the mixed model contrast output. 
 
 ```{r}
 p_pdr <- as.data.frame(summary(mixed_model) [[10]] [,1:5])
-
-
 
 # make strain and day factor
 data_for_stats$strain <- as.factor(data_for_stats$strain)
@@ -533,51 +500,7 @@ fdr <- p.adjust(corr_named_p_values$`Pr(>|t|)`, method = "fdr", n = length(corr_
 fdr_p_values <- cbind(corr_named_p_values,fdr)
 ```
 
-
-
-```{r}
-# the easiest way would be to split the data by strain and analyse it separately. Alters standard error and t value slightly. Do it the above way. 
-
-# this is easy but wrong. It is better to do what I did above, which is slightly alter how the model is determined and perform the
-# appropriate post hoc tests. 
-strains <- c("-by-", "-pdr-")
-
-strains_separate <- list()
-
-for (i in 1:length(strains)) {
-  
-  strain <- data_for_stats [grep(pattern = strains [i], x = data_for_stats$sample), ]
-  
-  strains_separate [[i]] <- strain
-  
-} 
-
-# for by
-by <- strains_separate [[1]]
-
-by_model <- lmer(auc_l ~ insecticide + (1|day), data = by)
-  
-summary(by_model)
-
-plot(by_model)
-
-qqnorm(resid(by_model))
-
-qqline(resid(by_model))
-
-# for pdr
-pdr <- strains_separate [[2]]
-
-pdr_model <- lmer(auc_l ~ insecticide + (1|day), data = pdr)
-  
-summary(pdr_model)
-
-plot(pdr_model)
-
-qqnorm(resid(pdr_model))
-
-qqline(resid(pdr_model))
-```
+I considered retrieving the post hoc comparisons by making two models by strain. This, however, altered standard error and t values and was incorrect. Better to include all the information available. Above I did this but combined two factors to allow for the correct contrasts. This gave the same contrast output as the correct model where strain and insecticide were separate. I used the original model contrast output anyway, but switched the order of the strain factor to get the appropriate contrasts for both pdr and by (see above).
 
 Publication Plots using knell code. 
 
