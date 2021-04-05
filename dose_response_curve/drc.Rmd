@@ -13,6 +13,7 @@ Load Packages
 
 ```{r}
 library(tidyverse)
+library(growthcurver)
 ```
 
 
@@ -34,7 +35,7 @@ for (i in 1:length(1:7)) {
   
   file_name <- paste0("input/drc-", i, ".csv", sep = "")
   
-  raw_file <- read.csv("input/drc-1.csv")
+  raw_file <- read.csv(file_name)
   
   raw_files_list [[i]] <- raw_file
 } 
@@ -57,31 +58,33 @@ correctly_named_raw_list <- list()
 
 for (i in 1:length(raw_files_list)){
   
-  test <- raw_files_list [[i]]
+  indi_raw_files <- raw_files_list [[i]]
   
-  test1 <- plate_key_list [[i]]
-  
-  test2 <- cbind(plate_key_list [[i]] [1,], plate_key_list [[i]] [2,], plate_key_list [[i]] [3,])
+  plate_key_lin <- cbind(plate_key_list [[i]] [1,], plate_key_list [[i]] [2,], plate_key_list [[i]] [3,])
 
-  for (k in 1:length(test2)) {
+  for (k in 1:length(plate_key_lin)) {
   
     search <- paste0("^Sample X", k, "$", sep = "")
    
-    test$X.1 <- gsub(pattern = search, replacement = test2 [1,k], x = test$X.1)
+    indi_raw_files$X.1 <- gsub(pattern = search, replacement = plate_key_lin [1,k], x = indi_raw_files$X.1)
    
   }
   
-  correctly_named_raw_list [[i]] <- test
+  correctly_named_raw_list [[i]] <- indi_raw_files
   
 }
 
-gibbet <- correctly_named_raw_list [[7]] 
-
+# export to input, with _ instead of - to differentiate from existing links
+for (i in 1:length(correctly_named_raw_list)) {
+  
+  path <- paste0("input/drc_", i, ".csv", sep = "")
+  
+  write.csv(correctly_named_raw_list[[i]], file = path, row.names = FALSE)
+  
+}
 ```
-export these correctly named files back into input, replacing the existing links????
 
-
-I combined all the replicates using zsh to output a formatted, compiled csv file called formatted_compiled. I then edited the names of controls and blanks.
+I combined all the replicates using zsh to output a formatted, compiled a csv file called formatted_compiled. I then edited the names of controls and blanks.
 
 ```{zsh raw-file-formatting}
 #!/usr/bin/env zsh
@@ -91,3 +94,298 @@ cd ~/Documents/phd/DEG_yeast_insecticide_expt/dose_response_curve
 
 ./WHATIDID.sh 
 ``` 
+
+```{r}
+# read csv
+drc <- read.csv(file = "./results/formatted_compiled.csv", header = FALSE, stringsAsFactors = FALSE)
+
+# formatting function
+sens_data_form <- function(sens_data) {
+  # transpose
+  sens_data_trans <- t(sens_data)
+  # save first row as colnames
+  colnames(sens_data_trans) <- sens_data_trans [1, ]
+  # delete first row, which is now duplicate of colnames
+  sens_data_colnames <- sens_data_trans [-1, ]
+  # remove any empty rows. Sometimes created when importing csv file 
+  sens_data_no_blanks <- sens_data_colnames[rowSums(is.na(sens_data_colnames)) != ncol(sens_data_colnames),]
+  # convert matrix into dataframe
+  sens_data_df <- as.data.frame(sens_data_no_blanks)
+  # convert everything to numeric
+  sens_data_df[] <- lapply(sens_data_df, function(x) {
+    if(is.factor(x)) as.numeric(as.character(x)) else x
+  })
+  # convert to data frame
+  sens_data_corr <- as.data.frame(sens_data_df)
+  # separate blanks
+  blanks <- sens_data_corr [, grep(pattern = "blank", x = colnames(sens_data_corr))]
+  # remove blanks
+  sens_data_corr <- sens_data_corr [, -grep(pattern = "blank", x = colnames(sens_data_corr))]
+  # take mean of each row
+  blanks_mean <- rowMeans(blanks)
+  # correct for blank
+  sens_data_corr <- sens_data_corr [, -1] - blanks_mean
+  # add time again
+  time <- seq(0, 960, by = 5)
+  sens_data_corr <- cbind(as.data.frame(time), sens_data_corr)
+  
+  return(sens_data_corr)
+}
+
+drc_corr <- sens_data_form(drc)
+
+# set any negative values to 0
+drc_corr[drc_corr<0] <- 0
+```
+
+Input this data in growthcurver 
+
+```{r, include = FALSE}
+growthcurver_function <- function(sens_data_corr) {
+  
+# Let's create an output data frame to store the results in. 
+# We'll create it so that it is the right size (it's faster this way!), 
+# but leave it empty.
+num_analyses <- length(names(sens_data_corr)) - 1
+d_gc <- data.frame(sample = character(num_analyses),
+                   k = numeric(num_analyses),
+                   n0  = numeric(num_analyses),
+                   r = numeric(num_analyses),
+                   r_se = numeric(num_analyses),
+                   r_p = numeric(num_analyses),
+                   t_mid = numeric(num_analyses),
+                   t_gen = numeric(num_analyses),
+                   auc_l = numeric(num_analyses),
+                   auc_e = numeric(num_analyses),
+                   sigma = numeric(num_analyses),
+                   stringsAsFactors = FALSE)
+
+# Now, loop through all of the columns in the data frame. For each column,
+# run Growthcurver, save the most useful metrics in the output data frame,
+# and make a plot of all the growth curve data and their best fits.
+par(mfrow = c(2,2))
+par(mar = c(1,1,1,1))
+y_lim_max <- max(sens_data_corr[,setdiff(names(sens_data_corr), "time")]) - min(sens_data_corr[,setdiff(names(sens_data_corr), "time")])
+
+n <- 1    # keeps track of the current row in the output data frame
+for (col_name in names(sens_data_corr)) {
+  
+  # Don't process the column called "time". 
+  # It contains time and not absorbance data.
+  if (col_name != "time") {
+    
+    # Create a temporary data frame that contains just the time and current col
+    sens_data_corr_loop <- sens_data_corr[, c("time", col_name)]
+    
+    # Now, call Growthcurver to calculate the metrics using SummarizeGrowth
+    gc_fit <- SummarizeGrowth(data_t = sens_data_corr_loop[, "time"], 
+                              data_n = sens_data_corr_loop[, col_name],
+                              bg_correct = "none")
+    
+    # Now, add the metrics from this column to the next row (n) in the 
+    # output data frame, and increment the row counter (n)
+    d_gc$sample[n] <- col_name
+    d_gc[n, 2:11] <- c(gc_fit$vals$k,
+                       gc_fit$vals$n0,
+                       gc_fit$vals$r,
+                       gc_fit$vals$r_se,
+                       gc_fit$vals$r_p,
+                       gc_fit$vals$t_mid,
+                       gc_fit$vals$t_gen,
+                       gc_fit$vals$auc_l,
+                       gc_fit$vals$auc_e,
+                       gc_fit$vals$sigma)
+    n <- n + 1
+    
+    
+    # Finally, plot the raw data and the fitted curve
+    n_obs <- length(gc_fit$data$t)
+    plot(gc_fit$data$t, gc_fit$data$N, 
+      pch = 20, 
+      xlim = c(0, 960), 
+      ylim = c(0, y_lim_max),
+      cex = 0.6, xaxt = "n", yaxt = "n")
+    text(x = 960 / 2, y = y_lim_max, labels = col_name, pos = 1)
+    lines(gc_fit$data$t, predict(gc_fit$model),col = "red")
+
+  }
+}
+
+# Uncomment the next line to save the plots from your 96-well plate to a file
+# dev.off()
+
+return(d_gc)
+
+}
+
+d_gc <- growthcurver_function(sens_data_corr = drc_corr)
+```
+
+Look at the high sigma graphs for curve fit. They all look fine. No reason to remove any replicates.
+
+```{r}
+# Show the top 50 samples with the largest sigma value 
+# (with the worst model fit to the growth curve data)
+high_sigma <- d_gc %>% top_n(50, sigma) %>% arrange(desc(sigma))
+
+# look at some of top 50 sigma observations
+high_sigma_obser <- c("time", high_sigma$sample)
+
+high_sigma_obser_df <- matrix(0, nrow = 193, ncol = length(high_sigma_obser))
+
+for (i in 1:length(high_sigma_obser)) {
+  
+  only <- paste0("^", high_sigma_obser [i], "$", sep = "")
+  
+  high_sigma_plots <- drc_corr [, grep(pattern = only, x = colnames(drc_corr))]
+
+  high_sigma_obser_df [, i] <- high_sigma_plots
+}
+
+colnames(high_sigma_obser_df) <- high_sigma_obser
+
+high_sigma_obser_df <- as.data.frame(high_sigma_obser_df)
+
+growthcurver_function(sens_data_corr = high_sigma_obser_df)
+```
+
+Check with a pca. Two groups. ALl the conc-1 and then everything else. No surprise so not going to remove anything. 
+
+```{r}
+pca_gc_out <- as_tibble(d_gc) 
+
+# Prepare the gc_out data for the PCA
+rownames(pca_gc_out) <- pca_gc_out$sample
+
+# Do the PCA
+pca.res <- prcomp(pca_gc_out %>% select(k:sigma), center=TRUE, scale=TRUE)
+
+pdf(file="results/pca.pdf") 
+# Plot the results
+as_tibble(list(PC1=pca.res$x[,1],
+                   PC2=pca.res$x[,2],
+                   samples = rownames(pca_gc_out))) %>% 
+  ggplot(aes(x=PC1,y=PC2, label=samples)) + 
+geom_text(size = 1)
+dev.off()
+```
+
+Next, split the data in groups of technical replicates, choose only the median and recombine. 
+
+```{r}
+# change name of 0.0001
+d_gc$sample <- gsub(pattern = "1e-04", replacement = "0.0001", x = d_gc$sample)
+
+# grab only names without a .
+dotless <- d_gc$sample [grep(pattern = "^(.+-){1,}[[:digit:]]+$", x = d_gc$sample)]
+
+# take only sample name and auc_l from d_gc
+total_growth <- as.data.frame(cbind(d_gc$sample, d_gc$auc_l))
+colnames(total_growth) <- c("sample", "auc_l")
+total_growth$auc_l <- as.numeric(as.character(total_growth$auc_l))
+
+# separate technical replicates into their own groups in a list
+tech_rep_list <- list()
+
+for (i in 1:length(dotless)) {
+  
+  pattern <- paste0("^", dotless [i], "$", sep = "")
+  
+  technical_replicates <- total_growth [grep(pattern = pattern , x = d_gc$sample) ,]
+
+  tech_rep_list [[i]] <- technical_replicates
+  
+}
+
+# calculate the median for each group of technical replicates in the list
+auc_l <- sapply(tech_rep_list, function(x){
+  
+  auc_l <- x [, 2]
+  
+  median <- median(auc_l)
+  
+  return(median)
+})
+
+# combine median with technical replicate group name
+data_for_stats <- as.data.frame(cbind(dotless,auc_l))
+data_for_stats$dotless <- as.character(data_for_stats$dotless)
+data_for_stats$auc_l <- as.numeric(as.character(data_for_stats$auc_l))
+```
+
+Look at the means of the concentrations for a quick idea of what is going on. 
+
+```{r}
+# mean for each group
+conc_searcher_input <- c("1", "0.1", "0.01", "0.001", "0.0001")
+
+conc_groups <- list()
+
+for (i in 1:length(conc_searcher_input)) {
+  
+  pattern <- paste0("^", conc_searcher_input [i], "-[[:digit:]]+$", sep = "")
+  
+  concentrations <- data_for_stats [grep(pattern = pattern, x = data_for_stats$dotless), ]
+  
+  conc_groups [[i]] <- concentrations
+  
+}
+
+mean_concs <- sapply(conc_groups, function(x){
+  
+  auc_l <- x [, 2]
+  
+  mean <- mean(auc_l)
+  
+  return(mean)
+})
+
+```
+
+Give data_for_stats concentration and day column 
+
+```{r}
+# split names of samples by - and then saves these are their own columns. 
+by_column_name <- tibble()
+
+for (i in 1:nrow(data_for_stats)){
+  
+  split <- strsplit(data_for_stats [i, 1], split = "-")
+  
+  by_column_name [i, 1] <- split [[1]] [1]
+  
+  by_column_name [i, 2] <- split [[1]] [2]
+  
+}
+
+data_for_stats <- cbind(data_for_stats, by_column_name)
+
+colnames(data_for_stats) <- c("sample", "auc_l", "concentration", "day")
+
+# make strain day factor
+data_for_stats$day <- as.factor(data_for_stats$day)
+
+# make concentration numeric
+data_for_stats$concentration <- as.numeric(data_for_stats$concentration)
+```
+
+Begin drc analysis
+
+```{r}
+library(drc)
+plot(auc_l ~ concentration, data = data_for_stats, log='x')
+
+thia_ll4 <- drm(auc_l ~ concentration, data = data_for_stats, fct = LL.4())
+
+plot(thia_ll4)
+
+plot(thia_ll4, type = "all")
+
+plot(fitted(thia_ll4),resid(thia_ll4))
+
+qqnorm(resid(thia_ll4))
+
+summary(thia_ll4)
+```
+
+As you can see these results are meaningless because everything, apart from the upper limit, is inferred from two data points....Redo drc with concentrations between 0.1-1.

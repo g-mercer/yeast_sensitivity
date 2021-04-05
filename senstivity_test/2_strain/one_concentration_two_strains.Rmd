@@ -267,7 +267,7 @@ auc_l <- sapply(tech_rep_list, function(x){
   
   auc_l <- x [, 2]
   
-  median <- mean(auc_l)
+  median <- median(auc_l)
   
   return(median)
 })
@@ -300,7 +300,6 @@ for (i in 1:length(name_corrections)){
 # reassociate renamed rows with df
 data_for_stats <- rbind(data_for_stats,dotlesss)
 
-
 # split names of samples by - and then saves these are their own columns. 
 by_column_name <- tibble()
 
@@ -325,6 +324,8 @@ data_for_stats$insecticide <- relevel(data_for_stats$insecticide, "controlneg")
 
 # make strain and day factor
 data_for_stats$strain <- as.factor(data_for_stats$strain)
+data_for_stats$strain <- relevel(data_for_stats$strain, "pdr")
+
 data_for_stats$day <- as.factor(data_for_stats$day)
 
 ```
@@ -427,10 +428,118 @@ for (i in 1:length(ci_list)) {
 colnames(ci_df) <- c("group", "mean", "lower", "upper")
 ```
 
-Next is do pairwise comparisons of my choice. Control solvent vs everything else for each strain. Below is the right package but wrong implementation.
+Next is do pairwise comparisons of my choice. Control solvent vs everything else for each strain. Below is the right package but wrong implementation. To get it to work I will have to combine the insecticide and strain factors. 
 
 ```{r}
-# the easiest way would be to split the data by strain and analyse it separately. All the predicted values are the same. 
+library(multcomp)
+
+data_for_stats$insecticidestrain <- paste0(data_for_stats$insecticide,"-", data_for_stats$strain, sep = "")
+
+# make insecticidestrain factor and reorder
+data_for_stats$insecticidestrain <- as.factor(data_for_stats$insecticidestrain)
+data_for_stats$insecticidestrain <- relevel(data_for_stats$insecticidestrain, "controlneg-pdr")
+
+mixed_model_1 <- lmer(auc_l ~ insecticidestrain + (1|day), data = data_for_stats)
+
+summary(mixed_model_1)
+
+plot(mixed_model_1)
+
+qqnorm(resid(mixed_model_1))
+
+qqline(resid(mixed_model_1))
+
+plot(density(resid(mixed_model_1)))
+
+summary(glht(mixed_model_1, linfct=mcp(insecticidestrain="Tukey")))
+```
+
+Of course there are loads of unnecessary comparisons going on here so extract the meaningful ones and perform a FDR correction. 
+
+```{r}
+post_hoc_tests <- summary(glht(mixed_model_1, linfct=mcp(insecticidestrain="Tukey")))
+# extract the relevant information. This output matches the mix model contrasts output for all columns (standard error, t stat, p value)
+post_hoc_test_results <- as.data.frame(post_hoc_tests [[10]] [3:6])
+
+# extract relevant columns
+search_terms <- c("- controlneg-pdr", "- controlneg-by")
+
+relevant_comparisons_combined <- tibble()
+  
+for (i in 1:length(search_terms)) {
+  
+  relevant_comparisons <- post_hoc_test_results [grep(pattern = search_terms [i], x = rownames(post_hoc_test_results)), ]
+
+  relevant_comparisons_combined <- rbind(relevant_comparisons_combined, relevant_comparisons)
+}
+
+regex_terms <- c("[[:alpha:]]+-pdr - controlneg-pdr", "[[:alpha:]]+-by - controlneg-by")
+
+final_comparisons <- tibble()
+
+for (i in 1:length(regex_terms)) {
+  
+strain_only <- relevant_comparisons_combined [grep(pattern = regex_terms [i], x = rownames(relevant_comparisons_combined)), ]
+
+final_comparisons <- rbind(final_comparisons, strain_only)
+
+}
+```
+
+P values above have been corrected already (wrong because too many comparisons) and not all the comparisons are the correct way around (control vs x). 
+
+```{r}
+p_pdr <- as.data.frame(summary(mixed_model) [[10]] [,1:5])
+
+
+
+# make strain and day factor
+data_for_stats$strain <- as.factor(data_for_stats$strain)
+data_for_stats$strain <- relevel(data_for_stats$strain, "by")
+data_for_stats$day <- as.factor(data_for_stats$day)
+
+mixed_model_by_first <- lmer(auc_l ~ insecticide * strain + (1|day), data = data_for_stats)
+p_by <- p <- as.data.frame(summary(mixed_model_by_first) [[10]] [,1:5])
+
+p <- rbind(p_pdr,p_by)
+
+p <- p [c(2:10,22:30),]
+
+# give rows correct names
+
+strains <- c("pdr ", "by ")
+searches <- c("^[[:lower:]]{11}[[:lower:]]*$", "^[[:lower:]]{11}[[:lower:]]*1$")
+
+
+corr_named_p_values <- tibble()
+
+for (i in 1:length(searches)) {
+  
+  strain_sep <- p [grep(pattern = searches [i], x = rownames(p)), ]
+  
+  rownames(strain_sep) <- gsub(pattern = "insecticide", replacement = strains [i], x = rownames(strain_sep))
+  
+  replacement_term <- paste0(" vs controlneg ", strains [i], sep = "")
+  
+  rownames(strain_sep) <- sub(pattern = "$", replacement = replacement_term, x = rownames(strain_sep))
+  
+  corr_named_p_values <- rbind(corr_named_p_values, strain_sep)
+
+}
+
+# perform FDR correction. Set a 5% false discovery rate
+fdr <- p.adjust(corr_named_p_values$`Pr(>|t|)`, method = "fdr", n = length(corr_named_p_values$`Pr(>|t|)`))
+
+fdr_p_values <- cbind(corr_named_p_values,fdr)
+```
+
+
+
+```{r}
+# the easiest way would be to split the data by strain and analyse it separately. Alters standard error and t value slightly. Do it the above way. 
+
+# this is easy but wrong. It is better to do what I did above, which is slightly alter how the model is determined and perform the
+# appropriate post hoc tests. 
 strains <- c("-by-", "-pdr-")
 
 strains_separate <- list()
@@ -470,23 +579,117 @@ qqnorm(resid(pdr_model))
 qqline(resid(pdr_model))
 ```
 
-How would I FDR correct. Effectively I have performed 9 hypothesis tests twice. So should I isolate them, rank and perform fdr. Feels wrong. 
-Practice for performing fdr correction. 
-
-```{r}
-p <- summary(mixed_model) [[10]] [,5]
-
-fdr <- p.adjust(p, method = "fdr", n = length(p))
-
-p_values <- cbind(p,fdr)
-```
-
 Publication Plots using knell code. 
 
 ```{r}
+# do one with mean and CI first. As there are alot of conditions split into two plots by strain
+# but with the same y axis limits. 
+
+# give ci_df insecticide and strain columns
+# split names of samples by - and then saves these are their own columns. 
+by_column_name <- tibble()
+
+for (i in 1:nrow(ci_df)){
+  
+  split <- strsplit(ci_df [i, 1], split = "-")
+  
+  for (k in 1:length(split [[1]])){
+    
+     by_column_name [i, k] <- split [[1]] [k]
+  }
+  
+}
+
+ci_df <- cbind(ci_df, by_column_name)
+
+colnames(ci_df) <- c("sample", "mean", "ci_l", "ci_h","insecticide", "strain")
+
+# make mean, ci_l and ci_h numeric
+ci_df$mean <- as.numeric(as.character(ci_df$mean))
+ci_df$ci_l <- as.numeric(as.character(ci_df$ci_l))
+ci_df$ci_h <- as.numeric(as.character(ci_df$ci_h))
+
+# make insecticide factor and reorder
+ci_df$insecticide <- as.factor(ci_df$insecticide)
+ci_df$insecticide <- relevel(ci_df$insecticide, "controlneg")
+
+# make strain factor
+ci_df$strain <- as.factor(ci_df$strain)
+
+# set up the plot basics
+p1 <-
+  ggplot(data = ci_df, aes(
+    x = insecticide,
+    y = mean,
+    colour = as.factor(strain)
+  )) +
+  
+# Specify the y axis limits
+  ylim(0, 800) +
+  
+# Add the points for the means  
+  geom_point(position = position_dodge(width = 0.75), size = 3) +
+  
+# Add the errorbars
+  geom_errorbar(
+    aes(
+      x = insecticide,
+      ymin = ci_l,
+      ymax = ci_h,
+      colour = as.factor(strain)
+    ),
+    position = position_dodge(width = 0.75),
+    width = 0.1
+  ) +
+  
+# Add in the data with some transparency and jitter
+  geom_point(
+    data = data_for_stats,
+    aes(
+      x = insecticide,
+      y = auc_l,
+      colour = as.factor(strain)
+    ),
+    alpha = 0.4,
+    position  = position_jitterdodge(),
+    show.legend = FALSE
+  ) +
+  
+# Set the colours
+  scale_color_manual(values = c("firebrick4", "steelblue")) +
+
+# Avoid the nasty default theme
+  theme_bw() + 
+  
+# Y axis label and the caption for the legend  
+  labs(y = "Total Growth", colour = "Strain") +
+  
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+
+# Plot the graph
+p1
+
+# for visualising plots split data by strain and plot separately. 
+ci_df_pdr <- ci_df [ci_df$strain == "pdr", ]
+data_for_stats_pdr <- data_for_stats [data_for_stats$strain == "pdr", ]
+
+ci_df_by <- ci_df [ci_df$strain == "by", ]
+data_for_stats_by <- data_for_stats [data_for_stats$strain == "by", ]
+
+
+
+
+
+
+
+
+
 # not the publication plot. 
 boxplot(auc_l ~ insecticide*strain ,data = data_for_stats, las=2, notch = FALSE, xlab="")
 
 ```
 
 Before getting carried away with any of these results remember that 1mM thiacloprid = 253ppm or 253000ppb....at least 3 orders of magnitude higher than a field realistic dose. For checking if t distributions can be used for CIs look at distribution of each group separately. 
+
+

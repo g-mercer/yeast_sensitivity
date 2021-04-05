@@ -1,0 +1,120 @@
+---
+title: "cell_viability_assay"
+author: "Guy Mercer"
+date: "04/04/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+viability_data <- read_csv("input/trypan_blue_counts.csv")
+
+# subset data by each timepoint
+time <- c("10m", "30m", "1h", "2h", "4h", "16h")
+
+timepoint_split_fun <- function(x) {
+  
+  timepoints_list <- list()
+
+  for (i in 1:length(time)) {
+  
+    timepoint <- x [grep(pattern = time [i], x = x$Sample), ]
+
+    timepoints_list [[i]] <- timepoint
+  }
+
+  return(timepoints_list)
+
+}
+
+timepoints_list <- timepoint_split_fun(viability_data)
+
+
+# subset data by timepoint and treatment
+treatment <- c("cont", "mala", "thia")
+
+list_of_treatment_lists <-list()
+for (i in 1:length(timepoints_list)) {
+  
+  treatment_list <- list()
+  for (k in 1:length(treatment)) {
+    
+    by_treatment <- timepoints_list [[i]] [grep(pattern = treatment [k], x = timepoints_list [[i]]$Sample), ]
+    
+    treatment_list [[k]] <- by_treatment
+    
+  }
+  
+  list_of_treatment_lists [[i]] <- treatment_list
+  
+}
+
+# sum the groups' columns
+combined_group_data <- matrix(0, nrow = 1, ncol = 4)
+
+for (i in 1:length(list_of_treatment_lists)) {
+  
+  for (k in 1:length(treatment)) {
+    
+    by_group <- as.data.frame(list_of_treatment_lists [[i]] [k])
+    
+    col_sums <- c(by_group [1,1],colSums(by_group [,2:4]))
+    
+    combined_group_data <- rbind(combined_group_data, col_sums)
+    
+  }
+  
+}
+
+# tidy up the dataframe and correct one of the sample names
+combined_group_data <- combined_group_data [2:19,]
+rownames(combined_group_data) <- 1:18
+colnames(combined_group_data) [1] <- "Sample"
+combined_group_data [13,1] <- "control-4h"
+
+# get into numeric again
+combined_group_data <- as.data.frame(combined_group_data)
+combined_group_data$Viable <-  as.numeric(as.character(combined_group_data$Viable))
+combined_group_data$Non.Viable <-  as.numeric(as.character(combined_group_data$Non.Viable))
+combined_group_data$Total <-  as.numeric(as.character(combined_group_data$Total))
+
+
+# split by timepoint into list again
+for_stats <- timepoint_split_fun(combined_group_data)
+```
+
+Now perform fisher's exact test for each timepoint. Do a post hoc comparison but ignore the thia vs mala because we aren't interested in it. 
+
+```{r}
+# load package
+library(RVAideMemoire)
+
+fisher_df <- as.matrix(for_stats [[1]] [,2:3])
+
+rownames(fisher_df) <- for_stats [[1]] [,1]
+
+
+fisher.test(fisher_df,
+            alternative="two.sided")
+
+library(rcompanion)
+
+pt <- pairwiseNominalIndependence(fisher_df,
+
+                                 fisher = TRUE,
+
+                                 gtest  = FALSE,
+
+                                 chisq  = FALSE,
+                                 digits = 3)
+
+pt
+```
+

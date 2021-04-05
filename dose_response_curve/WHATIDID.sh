@@ -27,7 +27,7 @@ VAR=(`seq -s ' ' 1 1 7`)
 
 for i in $VAR; do
  
-format_growth_assay_data drc-${i} replicate_${i}
+format_growth_assay_data drc_${i} replicate_${i}
 
 tail -n +2 tmp/replicate_${i}_formatted.csv \
 | sed 's/,/-'"${i}"',/1' >> tmp/formatted_compiled.csv
