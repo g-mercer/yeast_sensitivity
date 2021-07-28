@@ -1,0 +1,448 @@
+---
+title: "drc_2"
+author: "Guy Mercer"
+date: "29/03/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+Load Packages
+
+```{r}
+library(tidyverse)
+library(growthcurver)
+library(ggtext)
+```
+
+Import plate keys and raw files
+
+```{r}
+# import plate keys and raw files
+raw_files_list <- list()
+
+plate_key_list <- list()
+
+for (i in 1:length(1)) {
+  
+  file_name <- paste0("plate_keys/day_", i, "_key.csv", sep = "")
+  
+  plate_key <- read.csv(file_name)
+  
+  plate_key_list [[i]] <- plate_key
+  
+  file_name <- paste0("input/drc-new-", i, ".csv", sep = "")
+  
+  raw_file <- read.csv(file_name)
+  
+  raw_files_list [[i]] <- raw_file
+} 
+
+# remove first column of plate keys as that is the well designation
+for (i in 1:length(plate_key_list)) {
+  
+  plate_key_list [[i]] <- plate_key_list [[i]] [, -1]
+  
+} 
+
+# what below does is extract the raw file and associated key, linearises the key file, then replaces the sample names with the correct concentrations. 
+
+correctly_named_raw_list <- list()
+
+for (i in 1:length(raw_files_list)) {
+  
+  indi_raw_files <- raw_files_list [[i]]
+  
+  plate_key_lin <- vector()
+  
+  for (j in 1:nrow(plate_key_list [[i]])) { 
+    
+      plate_key_lin <- c(plate_key_lin, plate_key_list [[i]] [j,])
+    
+  }
+  
+  plate_key_lin <- t(unlist(plate_key_lin))
+  
+  for (k in 1:length(plate_key_lin)) {
+  
+    search <- paste0("^Sample X", k, "$", sep = "")
+   
+    indi_raw_files$X.1 <- gsub(pattern = search, replacement = plate_key_lin [k], x = indi_raw_files$X.1)
+   
+  }
+  
+  correctly_named_raw_list [[i]] <- indi_raw_files
+  
+}
+
+# export to input, with _ instead of - to differentiate from existing links
+for (i in 1:length(correctly_named_raw_list)) {
+  
+  path <- paste0("input/drc_", i, ".csv", sep = "")
+  
+  write.csv(correctly_named_raw_list[[i]], file = path, row.names = FALSE) 
+  
+}
+```
+
+I combined all the replicates using zsh to output a formatted, compiled a csv file called formatted_compiled. I then edited the names of controls and blanks.
+
+```{zsh raw-file-formatting}
+#!/usr/bin/env zsh
+
+# setwd
+cd ~/Documents/phd/DEG_yeast_insecticide_expt/dose_response_curve/drc_2
+
+./WHATIDID.sh 
+``` 
+
+```{r}
+# read csv
+drc <- read.csv(file = "./results/formatted_compiled.csv", header = FALSE, stringsAsFactors = FALSE)
+
+# correctly label blanks
+# extract blanks
+blanks_only <- drc [grep(pattern = "Sample", x = drc$V1), ]
+drc <-  drc [-grep(pattern = "Sample", x = drc$V1), ]
+
+# label blanks
+blanks_only$V1 <- "blank"
+
+# add blanks back to dataframe
+drc <- rbind(drc,blanks_only)
+
+# formatting function
+sens_data_form <- function(sens_data) {
+  # transpose
+  sens_data_trans <- t(sens_data)
+  # save first row as colnames
+  colnames(sens_data_trans) <- sens_data_trans [1, ]
+  # delete first row, which is now duplicate of colnames
+  sens_data_colnames <- sens_data_trans [-1, ]
+  # remove any empty rows. Sometimes created when importing csv file 
+  sens_data_no_blanks <- sens_data_colnames[rowSums(is.na(sens_data_colnames)) != ncol(sens_data_colnames),]
+  # convert matrix into dataframe
+  sens_data_df <- as.data.frame(sens_data_no_blanks)
+  # convert everything to numeric
+  sens_data_df[] <- lapply(sens_data_df, function(x) {
+    if(is.factor(x)) as.numeric(as.character(x)) else x
+  })
+  # convert to data frame
+  sens_data_corr <- as.data.frame(sens_data_df)
+  # separate blanks
+  blanks <- sens_data_corr [, grep(pattern = "blank", x = colnames(sens_data_corr))]
+  # remove blanks
+  sens_data_corr <- sens_data_corr [, -grep(pattern = "blank", x = colnames(sens_data_corr))]
+  # take mean of each row
+  blanks_mean <- rowMeans(blanks)
+  # correct for blank
+  sens_data_corr <- sens_data_corr [, -1] - blanks_mean
+  # add time again
+  time <- seq(0, 960, by = 5)
+  sens_data_corr <- cbind(as.data.frame(time), sens_data_corr)
+  
+  return(sens_data_corr)
+}
+
+drc_corr <- sens_data_form(drc)
+
+# set any negative values to 0
+drc_corr[drc_corr<0] <- 0
+```
+
+Input this data in growthcurver 
+
+```{r, include = FALSE}
+growthcurver_function <- function(sens_data_corr) {
+  
+# Let's create an output data frame to store the results in. 
+# We'll create it so that it is the right size (it's faster this way!), 
+# but leave it empty.
+num_analyses <- length(names(sens_data_corr)) - 1
+d_gc <- data.frame(sample = character(num_analyses),
+                   k = numeric(num_analyses),
+                   n0  = numeric(num_analyses),
+                   r = numeric(num_analyses),
+                   r_se = numeric(num_analyses),
+                   r_p = numeric(num_analyses),
+                   t_mid = numeric(num_analyses),
+                   t_gen = numeric(num_analyses),
+                   auc_l = numeric(num_analyses),
+                   auc_e = numeric(num_analyses),
+                   sigma = numeric(num_analyses),
+                   stringsAsFactors = FALSE)
+
+# Now, loop through all of the columns in the data frame. For each column,
+# run Growthcurver, save the most useful metrics in the output data frame,
+# and make a plot of all the growth curve data and their best fits.
+par(mfrow = c(2,2))
+par(mar = c(1,1,1,1))
+y_lim_max <- max(sens_data_corr[,setdiff(names(sens_data_corr), "time")]) - min(sens_data_corr[,setdiff(names(sens_data_corr), "time")])
+
+n <- 1    # keeps track of the current row in the output data frame
+for (col_name in names(sens_data_corr)) {
+  
+  # Don't process the column called "time". 
+  # It contains time and not absorbance data.
+  if (col_name != "time") {
+    
+    # Create a temporary data frame that contains just the time and current col
+    sens_data_corr_loop <- sens_data_corr[, c("time", col_name)]
+    
+    # Now, call Growthcurver to calculate the metrics using SummarizeGrowth
+    gc_fit <- SummarizeGrowth(data_t = sens_data_corr_loop[, "time"], 
+                              data_n = sens_data_corr_loop[, col_name],
+                              bg_correct = "none")
+    
+    # Now, add the metrics from this column to the next row (n) in the 
+    # output data frame, and increment the row counter (n)
+    d_gc$sample[n] <- col_name
+    d_gc[n, 2:11] <- c(gc_fit$vals$k,
+                       gc_fit$vals$n0,
+                       gc_fit$vals$r,
+                       gc_fit$vals$r_se,
+                       gc_fit$vals$r_p,
+                       gc_fit$vals$t_mid,
+                       gc_fit$vals$t_gen,
+                       gc_fit$vals$auc_l,
+                       gc_fit$vals$auc_e,
+                       gc_fit$vals$sigma)
+    n <- n + 1
+    
+    
+    # Finally, plot the raw data and the fitted curve
+    n_obs <- length(gc_fit$data$t)
+    plot(gc_fit$data$t, gc_fit$data$N, 
+      pch = 20, 
+      xlim = c(0, 960), 
+      ylim = c(0, y_lim_max),
+      cex = 0.6, xaxt = "n", yaxt = "n")
+    text(x = 960 / 2, y = y_lim_max, labels = col_name, pos = 1)
+    lines(gc_fit$data$t, predict(gc_fit$model),col = "red")
+
+  }
+}
+
+# Uncomment the next line to save the plots from your 96-well plate to a file
+# dev.off()
+
+return(d_gc)
+
+}
+
+d_gc <- growthcurver_function(sens_data_corr = drc_corr)
+```
+
+Look at the high sigma graphs for curve fit. They all look fine. No reason to remove any replicates.
+
+```{r}
+# Show the top 50 samples with the largest sigma value 
+# (with the worst model fit to the growth curve data)
+high_sigma <- d_gc %>% top_n(50, sigma) %>% arrange(desc(sigma))
+
+# look at some of top 50 sigma observations
+high_sigma_obser <- c("time", high_sigma$sample)
+
+high_sigma_obser_df <- matrix(0, nrow = 193, ncol = length(high_sigma_obser))
+
+for (i in 1:length(high_sigma_obser)) {
+  
+  only <- paste0("^", high_sigma_obser [i], "$", sep = "")
+  
+  high_sigma_plots <- drc_corr [, grep(pattern = only, x = colnames(drc_corr))]
+
+  high_sigma_obser_df [, i] <- high_sigma_plots
+}
+
+colnames(high_sigma_obser_df) <- high_sigma_obser
+
+high_sigma_obser_df <- as.data.frame(high_sigma_obser_df)
+
+growthcurver_function(sens_data_corr = high_sigma_obser_df)
+```
+
+Check with a pca. Two groups. ALl the conc-1 and then everything else. No surprise so not going to remove anything. 
+
+```{r}
+pca_gc_out <- as_tibble(d_gc) 
+
+# Prepare the gc_out data for the PCA
+rownames(pca_gc_out) <- pca_gc_out$sample
+
+# Do the PCA
+pca.res <- prcomp(pca_gc_out %>% select(k:sigma), center=TRUE, scale=TRUE)
+
+pdf(file="results/pca.pdf") 
+# Plot the results
+as_tibble(list(PC1=pca.res$x[,1],
+                   PC2=pca.res$x[,2],
+                   samples = rownames(pca_gc_out))) %>% 
+  ggplot(aes(x=PC1,y=PC2, label=samples)) + 
+geom_text(size = 1)
+dev.off()
+```
+
+```{r}
+data_for_stats <- d_gc [, c(1,9)]
+```
+
+
+Look at the means of the concentrations for a quick idea of what is going on. 
+
+```{r}
+# mean for each group
+conc_searcher_input <- c("1", "0.85", "0.7", "0.55", "0.4", "0.25", "0.1", "0.01")
+
+conc_groups <- list()
+
+for (i in 1:length(conc_searcher_input)) {
+  
+  pattern <- paste0("(^", conc_searcher_input [i], "-[[:digit:]]+.[[:digit:]]+$)|(^", conc_searcher_input [i], "-[[:digit:]]+$)", sep = "")
+  
+  concentrations <- data_for_stats [grep(pattern = pattern, x = data_for_stats$sample), ]
+  
+  conc_groups [[i]] <- concentrations
+  
+}
+
+mean_concs <- sapply(conc_groups, function(x){
+  
+  auc_l <- x [, 2]
+  
+  mean <- mean(auc_l)
+  
+  return(mean)
+})
+
+```
+
+Give data_for_stats concentration column 
+
+```{r}
+# split names of samples by - and then saves these are their own columns. 
+by_column_name <- tibble()
+
+for (i in 1:nrow(data_for_stats)){
+  
+  split <- strsplit(data_for_stats [i, 1], split = "-")
+  
+  by_column_name [i, 1] <- split [[1]] [1]
+  
+}
+
+data_for_stats <- cbind(data_for_stats, by_column_name)
+
+colnames(data_for_stats) <- c("sample", "auc_l", "concentration")
+
+# make concentration numeric
+data_for_stats$concentration <- as.numeric(data_for_stats$concentration)
+```
+
+Begin drc analysis
+
+```{r}
+library(drc)
+
+plot(auc_l ~ concentration, data = data_for_stats, log='x')
+
+thia_ll4 <- drm(auc_l ~ concentration, data = data_for_stats, fct = LL.4())
+
+plot(thia_ll4)
+
+plot(thia_ll4, type = "all")
+
+plot(fitted(thia_ll4),resid(thia_ll4))
+
+qqnorm(resid(thia_ll4))
+
+summary(thia_ll4)
+
+confint(thia_ll4)
+
+plot(thia_ll4, type = "confidence")
+
+thia_ll3 <- drm(auc_l ~ concentration, data = data_for_stats, fct = LL.3())
+
+summary(thia_ll3)
+
+ED(thia_ll4, c(10, 20, 50))
+
+ED(thia_ll3, c(10, 20, 50))
+
+ED(thia_ll4, c(10, 20, 50), interval = 'delta')
+
+ED(thia_ll3, c(10, 20, 50), interval = 'delta')
+
+library(lmtest)
+library(sandwich)
+
+coeftest(thia_ll4, vcov = sandwich)
+ED(thia_ll4, c(10, 20, 50), interval = 'delta', vcov. = sandwich)
+
+```
+
+Assumption of normal distribution is fine. Sandwich adjusts standard error to account for heterogeneity of variance. There is less variation at lower auc_l values. If you compare the sandwich output to the standard output SE has decreased at the lower limit (c) and increased for the upper limit (d). The next step is to extract the relevant model parameter and convert them into a format that ggplot can handle. Follow the guided example as outline by Ritz [here](https://storage.googleapis.com/plos-corpus-prod/10.1371/journal.pone.0146021/1/pone.0146021.s001.pdf?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=wombat-sa%40plos-prod.iam.gserviceaccount.com%2F20210407%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20210407T115130Z&X-Goog-Expires=3600&X-Goog-SignedHeaders=host&X-Goog-Signature=33970bf387c12d9a00ba75d8ae6b2aa8b3d9ebaed4a9fadfaf9171f36a17618d1f42bead7c9a9499a6229771380a2b4bbc299419c4487efad120971a4218ff2e353c3ca72c93890e9a2bbc778ced3a4a776d1f83581fd28e062346c9f3d7522e48b2e66213595463ff59635fca4bb26568c727340c23f6d401a4ee6fa8a8cbfa898582893b6e737f43e47d59a38d9d889a141b39d8ac7fac445e9e8ccfae90eec4dc9edd2a266865178573cb11eeda8a194ec2aabe9e8b80ea4c0c503c89acad1a02cf22ce216eb8b4750b71cec0957177b3524d445b29dde5da320f35c13ee5960fdcde764d6dbee9f4cc2df9196e3a11ef5dd289cedf4e74c491a3c0c56ae2).
+
+```{r}
+# new dose levels as support for the line
+newdata <- expand.grid(conc=exp(seq(log(0.01), log(1), length=100)))
+# predictions and confidence intervals
+pm <- predict(thia_ll4, newdata=newdata, interval="confidence")
+# new data with predictions
+newdata$p <- pm[,1]
+newdata$pmin <- pm[,2]
+newdata$pmax <- pm[,3]
+
+# plot curve
+library(ggplot2)
+
+cairo_pdf(file = "/Users/guy/Documents/phd/DEG_yeast_insecticide_expt/dose_response_curve/drc_2/drc.pdf",   # The directory you want to save the file in
+    width = 6, # The width of the plot in inches
+    height = 4) # The height of the plot in inches
+
+# plotting the curve
+  ggplot(data_for_stats, aes(x = concentration, y = auc_l)) +
+  
+  geom_point(alpha = 0.4, colour = "steelblue") +
+  
+  geom_ribbon(data=newdata, aes(x=conc, y=p, ymin=pmin, ymax=pmax, fill = "f"), alpha=0.2, show.legend = FALSE) +
+    
+  scale_fill_manual(values = c("steelblue", "firebrick4")) +
+  
+  geom_line(data=newdata, aes(x=conc, y=p), colour = "steelblue") +
+  
+  coord_trans(x="log") +
+  
+  xlab("Thiacloprid (mM)") + ylab("Total Growth (AUC-l)") +
+  
+# Avoid the nasty default theme
+  theme_bw() +
+    
+  scale_x_continuous(breaks=c(0.01, 0.1, 0.25, 0.4, 0.55, 0.7, 0.85, 1)) +
+    
+  theme(panel.grid.minor = element_blank(), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  
+  ggtitle("Dose Response Curve for *pdr1∆ pdr3∆* Treated with Thiacloprid") +
+    
+  theme(plot.title = element_text(hjust = 0.5)) +
+    
+  theme(plot.title = ggtext::element_markdown())
+
+dev.off()
+```
+
+```{r}
+# saving output as csv for supplementary table
+summary_ll4 <- summary(thia_ll4) [[3]]
+summary(thia_ll4)
+
+confint_thia_ll4 <- confint(thia_ll4)
+confint(thia_ll4)
+
+complete_summary_ll4 <- cbind(summary(thia_ll4) [[3]], confint(thia_ll4))
+
+write.csv(complete_summary_ll4, "~/Documents/phd/DEG_yeast_insecticide_expt/dose_response_curve/drc_2/complete_summary_ll4.csv", row.names = TRUE)
+```
+

@@ -49,6 +49,8 @@ library(ggpubr)
 library(broom)
 library(patchwork)
 library(boot)
+library(ggtext)
+library(cowplot)
 ``` 
 
 ```{r}
@@ -130,8 +132,8 @@ d_gc <- data.frame(sample = character(num_analyses),
 # Now, loop through all of the columns in the data frame. For each column,
 # run Growthcurver, save the most useful metrics in the output data frame,
 # and make a plot of all the growth curve data and their best fits.
-par(mfrow = c(2,2))
-par(mar = c(1,1,1,1))
+par(mfrow = c(1,1))
+#par(mar = c(1,1,1,1))
 y_lim_max <- max(sens_data_corr[,setdiff(names(sens_data_corr), "time")]) - min(sens_data_corr[,setdiff(names(sens_data_corr), "time")])
 
 n <- 1    # keeps track of the current row in the output data frame
@@ -171,9 +173,13 @@ for (col_name in names(sens_data_corr)) {
       pch = 20, 
       xlim = c(0, 960), 
       ylim = c(0, y_lim_max),
+      xlab="time", ylab="Absorbance (600nm)",
       cex = 0.6, xaxt = "n", yaxt = "n")
     text(x = 960 / 2, y = y_lim_max, labels = col_name, pos = 1)
     lines(gc_fit$data$t, predict(gc_fit$model),col = "red")
+    axis(1, at = seq(0, 960, by = 60), las=2)
+    axis(2, at = seq(0, 2, by = 1), las=2)
+
 
   }
 }
@@ -186,6 +192,33 @@ return(d_gc)
 }
 
 d_gc <- growthcurver_function(sens_data_corr = sens_data_corr)
+
+search_term <- c("time","thiacloprid-pdr", "control-neg-pdr")
+
+thia_control <- tibble(matrix(0,193,0))
+
+for (i in 1:length(search_term)) {
+  
+  group <- sens_data_corr [, grep(pattern = search_term [i], x = colnames(sens_data_corr))]
+  
+  thia_control <- cbind(thia_control, group)
+  
+}
+
+thia_control <- thia_control [, -1]
+
+colnames(thia_control) [1] <- "time"
+
+thia_control <- thia_control [,c(1,2,22)]
+
+# plots
+ pdf(file = "/Users/guy/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/2_strain/example_growth_curves.pdf",   # The directory you want to save the file in
+     width = 6, # The width of the plot in inches
+     height = 4) # The height of the plot in inches
+
+example_plots <- growthcurver_function(sens_data_corr = thia_control)
+
+dev.off()
 ```
 
 I didn't actually perform a control positive in the end. All they are is 100µl of yeast stock. Quite cool because they show how half the volume really affects the smoothness of the curve. Remove them. Also, one of the thiacloprid is coming back as 0 for everything. This is causing the plotting part of the growthcurver function to fail. The readings performed on the same day are technical replicates so let's select the median value based on auc_l
@@ -327,7 +360,6 @@ data_for_stats$strain <- as.factor(data_for_stats$strain)
 data_for_stats$strain <- relevel(data_for_stats$strain, "pdr")
 
 data_for_stats$day <- as.factor(data_for_stats$day)
-
 ```
 
 Begin statistical analysis. Construct a linear mixed model. Check there is homogeneity of variance and residuals are normally distributed. 
@@ -348,10 +380,10 @@ plot(density(resid(mixed_model)))
 
 ```{r}
 # residual variance explained by day. 
-(7555/(7555+2953))*100
+(7045/(7045+3258))*100
 ```
 
-The difference between day explains 71.9%% of the variance left over after the variance explained by our fixed effects. 
+The difference between day explains 68.4%% of the variance left over after the variance explained by our fixed effects. 
 
 Test Model Significance
 
@@ -428,7 +460,7 @@ for (i in 1:length(ci_list)) {
 colnames(ci_df) <- c("group", "mean", "lower", "upper")
 ```
 
-Next is do pairwise comparisons of my choice. Control solvent vs everything else for each strain. Below is the right package but wrong implementation. To get it to work I will have to combine the insecticide and strain factors. 
+Next is do pairwise comparisons of my choice. Control solvent vs everything else for each strain. Below is the right package but wrong implementation. To get it to work I will have to combine the insecticide and strain factors. The output of the model below is misleading because everything is being compared to controlneg-pdr, which isn't correct. However, it doesn't matter because this model was only produced to get the multiple comparisons output and to check if they were the same as the model summary contrast values, which they are. 
 
 ```{r}
 library(multcomp)
@@ -441,15 +473,15 @@ data_for_stats$insecticidestrain <- relevel(data_for_stats$insecticidestrain, "c
 
 mixed_model_1 <- lmer(auc_l ~ insecticidestrain + (1|day), data = data_for_stats)
 
-summary(mixed_model_1)
+# summary(mixed_model_1)
 
-plot(mixed_model_1)
+# plot(mixed_model_1)
 
-qqnorm(resid(mixed_model_1))
+# qqnorm(resid(mixed_model_1))
 
-qqline(resid(mixed_model_1))
+# qqline(resid(mixed_model_1))
 
-plot(density(resid(mixed_model_1)))
+# plot(density(resid(mixed_model_1)))
 
 # this takes ages to load but shows that the contrasts from the model output are the same as the pairwise comparison Tukey method (appropriate version for mixed models)
 # summary(glht(mixed_model_1, linfct=mcp(insecticidestrain="Tukey")))
@@ -466,7 +498,7 @@ data_for_stats$strain <- relevel(data_for_stats$strain, "by")
 data_for_stats$day <- as.factor(data_for_stats$day)
 
 mixed_model_by_first <- lmer(auc_l ~ insecticide * strain + (1|day), data = data_for_stats)
-p_by <- p <- as.data.frame(summary(mixed_model_by_first) [[10]] [,1:5])
+p_by <- as.data.frame(summary(mixed_model_by_first) [[10]] [,1:5])
 
 p <- rbind(p_pdr,p_by)
 
@@ -505,11 +537,11 @@ I considered retrieving the post hoc comparisons by making two models by strain.
 Publication Plots using knell code. 
 
 ```{r}
-# do one with mean and CI first. As there are alot of conditions split into two plots by strain
+# do one with mean and CI first. As there are a lot of conditions split into two plots by strain
 # but with the same y axis limits. 
 
 # give ci_df insecticide and strain columns
-# split names of samples by - and then saves these are their own columns. 
+# split names of samples by - and then saves these as their own columns. 
 by_column_name <- tibble()
 
 for (i in 1:nrow(ci_df)){
@@ -525,94 +557,216 @@ for (i in 1:nrow(ci_df)){
 
 ci_df <- cbind(ci_df, by_column_name)
 
-colnames(ci_df) <- c("sample", "mean", "ci_l", "ci_h","insecticide", "strain")
+colnames(ci_df) <- c("sample", "mean", "ci_l", "ci_h", "insecticide", "strain")
 
 # make mean, ci_l and ci_h numeric
 ci_df$mean <- as.numeric(as.character(ci_df$mean))
 ci_df$ci_l <- as.numeric(as.character(ci_df$ci_l))
 ci_df$ci_h <- as.numeric(as.character(ci_df$ci_h))
 
-# make insecticide factor and reorder
-ci_df$insecticide <- as.factor(ci_df$insecticide)
-ci_df$insecticide <- relevel(ci_df$insecticide, "controlneg")
+# to add p values from fdr_p_values use stat_pvalue_manual
 
-# make strain factor
-ci_df$strain <- as.factor(ci_df$strain)
+# first create a df with group1 | group2 | p | y.position columns for each strain. (y position column isn't necessary if universal, denotes the y coordinates of the p-values in the plot)
 
-# set up the plot basics
-p1 <-
-  ggplot(data = ci_df, aes(
-    x = insecticide,
-    y = mean,
-    colour = as.factor(strain)
-  )) +
+# split fdr_p_values by strain
+fdr_p_values_pdr <- fdr_p_values [grep(pattern = "pdr", x = rownames(fdr_p_values)),]
+fdr_p_values_by <- fdr_p_values [grep(pattern = "by", x = rownames(fdr_p_values)),]
+
+p_value_plot_overlay_function <- function(p_values_df, pattern1, pattern2) {
   
-# Specify the y axis limits
-  ylim(0, 800) +
+  # based on rownames give fdr_p_values_pdr two columns with the two groups being compared with the appropriate - in their name
+  split_list <- str_split(rownames(p_values_df), "vs")
   
-# Add the points for the means  
-  geom_point(position = position_dodge(width = 0.75), size = 3) +
+  group_names <- tibble()
+  colnames(group_names) <- c("group-1", "group-2")
   
-# Add the errorbars
-  geom_errorbar(
-    aes(
+  for (i in 1:length(split_list)) {
+    group_1 <- sub(pattern = " ", replacement = "-" , split_list [[i]][1]) %>% sub(pattern = " ", replacement = "") %>% sub(pattern = "1", replacement = "")
+    group_names [i, 1] <- group_1 
+    
+    group_2 <- sub(pattern = " ", replacement = "" , split_list [[i]][2]) %>% sub(pattern = " ", replacement = "-") %>% sub(pattern = " ", replacement = "")
+    group_names [i, 2] <- group_2 
+    
+  }
+  
+  for_plot_overlay <- cbind(group_names, p_values_df$fdr)
+  colnames(for_plot_overlay) <- c("group1", "group2", "p.adj")
+  
+  for_plot_overlay$group1 <- gsub(pattern = pattern1, replacement = "", x = for_plot_overlay$group1)
+  
+  for_plot_overlay$group1 <- sapply(for_plot_overlay$group1, function(x) paste(x, pattern2, sep=""))
+  
+  for_plot_overlay <- add_significance(for_plot_overlay)
+  
+  for_plot_overlay$group1 <- gsub(pattern = pattern2, replacement = "", x = for_plot_overlay$group1)
+  
+  for_plot_overlay$group2 <- gsub(pattern = pattern2, replacement = "", x = for_plot_overlay$group2)
+  
+  return(for_plot_overlay)
+  
+}
+
+p_values_plot_overlay_pdr <- p_value_plot_overlay_function(fdr_p_values_pdr, "pdr-", "-pdr")
+
+p_values_plot_overlay_by <- p_value_plot_overlay_function(fdr_p_values_by, "by-", "-by")
+
+knell_plot_function <- function(ci_df, data_for_stats, colour1, colour2, p_data, strain, fig_letter) {
+  
+  title <- paste0(fig_letter, "Growth Effects of Insecticides on ", strain, " at 1mM", sep = "")
+  
+  # set up the plot basics
+  p1 <-
+    ggplot(data = ci_df, aes(
       x = insecticide,
-      ymin = ci_l,
-      ymax = ci_h,
+      y = mean,
       colour = as.factor(strain)
-    ),
-    position = position_dodge(width = 0.75),
-    width = 0.1
-  ) +
-  
-# Add in the data with some transparency and jitter
-  geom_point(
-    data = data_for_stats,
-    aes(
-      x = insecticide,
-      y = auc_l,
-      colour = as.factor(strain)
-    ),
-    alpha = 0.4,
-    position  = position_jitterdodge(),
-    show.legend = FALSE
-  ) +
-  
-# Set the colours
-  scale_color_manual(values = c("firebrick4", "steelblue")) +
+    )) +
+    
+    # Specify the y axis limits
+    ylim(0, 1000) +
+    
+    # Add the points for the means  
+    geom_point(position = position_dodge(width = 0.75), size = 3) +
+    
+    # Add the errorbars
+    geom_errorbar(
+      aes(
+        x = insecticide,
+        ymin = ci_l,
+        ymax = ci_h,
+        colour = as.factor(strain)
+      ),
+      position = position_dodge(width = 0.75),
+      width = 0.1
+    ) +
+    
+    # Add in the data with some transparency and jitter
+    geom_point(
+      data = data_for_stats,
+      aes(
+        x = insecticide,
+        y = auc_l,
+        colour = as.factor(strain)
+      ),
+      alpha = 0.4,
+      position  = position_jitterdodge(),
+      show.legend = FALSE
+    ) +
+    
+    # Set the colours
+    scale_color_manual(values = c(colour1, colour2)) +
+    
+    # Avoid the nasty default theme
+    theme_bw() + 
+    
+    # Y axis label and the caption for the legend  
+    labs(y = "Total Growth (AUC-l)", colour = "Strain") +
+    
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+    
+    ggtitle(title) +
+    
+    theme(plot.title = element_text(hjust = 0.5)) +
+    
+    theme(plot.title = ggtext::element_markdown()) +
 
-# Avoid the nasty default theme
-  theme_bw() + 
+    
+    # add p-values
+    stat_pvalue_manual(
+      p_data, 
+      y.position = 800, step.increase = 0.1,
+      label = "p.adj.signif",
+      size = 3,
+      hide.ns = TRUE
+    )
   
-# Y axis label and the caption for the legend  
-  labs(y = "Total Growth", colour = "Strain") +
   
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  # Plot the graph
+  return(p1)
+  
+}
 
-
-# Plot the graph
-p1
-
-# for visualising plots split data by strain and plot separately. 
+# for visualising pdr plots split data by strain and plot separately. 
 ci_df_pdr <- ci_df [ci_df$strain == "pdr", ]
 data_for_stats_pdr <- data_for_stats [data_for_stats$strain == "pdr", ]
 
+# make insecticide factor and reorder
+ci_df_pdr$insecticide <- as.factor(ci_df_pdr$insecticide)
+ci_df_pdr$insecticide <- relevel(ci_df_pdr$insecticide, "controlneg")
+
+data_for_stats_pdr$insecticide <- as.factor(data_for_stats_pdr$insecticide)
+data_for_stats_pdr$insecticide <- relevel(data_for_stats_pdr$insecticide, "controlneg")
+
+# for visualising by plots split data by strain and plot separately. 
 ci_df_by <- ci_df [ci_df$strain == "by", ]
 data_for_stats_by <- data_for_stats [data_for_stats$strain == "by", ]
 
+# make insecticide factor and reorder
+ci_df_by$insecticide <- as.factor(ci_df_by$insecticide)
+ci_df_by$insecticide <- relevel(ci_df_by$insecticide, "controlneg")
 
+data_for_stats_by$insecticide <- as.factor(data_for_stats_by$insecticide)
+data_for_stats_by$insecticide <- relevel(data_for_stats_by$insecticide, "controlneg")
 
+pdr_plot <- knell_plot_function(ci_df_pdr, data_for_stats_pdr, "steelblue", "firebrick4", p_values_plot_overlay_pdr, "*pdr1∆ pdr3∆*", "b) ")
 
+by_plot <- knell_plot_function(ci_df_by, data_for_stats_by, "firebrick4", "steelblue", p_values_plot_overlay_by, "BY4741", "a) ")
 
+# plots
+ pdf(file = "/Users/guy/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/2_strain/pdr.pdf",   # The directory you want to save the file in
+     width = 6, # The width of the plot in inches
+     height = 4) # The height of the plot in inches
 
+pdr_plot
 
+ dev.off()
 
+ pdf(file = "/Users/guy/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/2_strain/by.pdf",   # The directory you want to save the file in
+     width = 6, # The width of the plot in inches
+     height = 4) # The height of the plot in inches
 
-# not the publication plot. 
-boxplot(auc_l ~ insecticide*strain ,data = data_for_stats, las=2, notch = FALSE, xlab="")
+by_plot
+
+dev.off()
+```
+
+Before getting carried away with any of these results remember that 1mM thiacloprid = 253ppm or 253000ppb....at least 2 orders of magnitude higher than a field realistic dose. For checking if t distributions can be used for CIs look at distribution of each group separately. 
+
+```{r}
+# generating supplementary tables 
+p_by_table <- p_by [1:10,]
+
+write.csv(p_by_table, "~/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/2_strain/p_by_table.csv", row.names = TRUE)
+
+p_pdr_table <- p_pdr [1:10,]
+
+write.csv(p_pdr_table, "~/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/2_strain/p_pdr_table.csv", row.names = TRUE)
 
 ```
 
-Before getting carried away with any of these results remember that 1mM thiacloprid = 253ppm or 253000ppb....at least 3 orders of magnitude higher than a field realistic dose. For checking if t distributions can be used for CIs look at distribution of each group separately. 
+```{r}
+# fiddling around with cowplot in the future. Here is the basic structure. Will have to alter plot function to 
+# remove titles in order to apply global title. 
+plot_row <- plot_grid(by_plot, pdr_plot, labels = "auto")
 
+# now add the title
+title <- ggdraw() + 
+  draw_label(
+    "Miles per gallon decline with displacement and horsepower",
+    fontface = 'bold',
+    x = 0,
+    hjust = 0
+  ) +
+  theme(
+    # add margin on the left of the drawing canvas,
+    # so title is aligned with left edge of first plot
+    plot.margin = margin(0, 0, 0, 7)
+  )
+plot_grid(
+  title, plot_row,
+  ncol = 1,
+  # rel_heights values control vertical title margins
+  rel_heights = c(0.1, 1)
+)
+```
 

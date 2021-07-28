@@ -1,0 +1,239 @@
+---
+title: "Off Target Toxicity of Insecticides in *S.cerevisiae* [Draft]"
+author: "Guy Mercer"
+date: \today
+output: pdf_document
+bibliography: references.bib
+csl: nature.csl
+---
+
+\newcommand{\beginsupplement}{%
+        \setcounter{table}{0}
+        \renewcommand{\thetable}{S\arabic{table}}%
+        \setcounter{figure}{0}
+        \renewcommand{\thefigure}{S\arabic{figure}}%
+     }
+
+\UseRawInputEncoding
+
+# Introduction
+Neonicotinoids, organophosphates and pyrethroids are three of the most commonly applied insecticide classes globally, and consequently, are frequently detected environmental contaminants, affecting non target species in both aquatic and terrestrial ecosystems [@aktar2009; @bonmatin2015; @dar2020; @goulson2015; @kikuchi2000; @simon-delso2015; @tang2018; @zaller2019]. Each of these three insecticide classes has one well defined primary molecular target they interact with, which leads to desired mortality in target organisms [@fukuto1990; @matsuda2001; @soderlund2002]. In conjunction, clear cellular effects have been documented. In particular, toxicity linked to oxidative stress is common to all three insecticide classes [@altuntas2003; @duzguner2012; @el-gendy2010; @fortunato2006; @gabbianelli2004; @ge2015; @giordano2007; @kale1999; @moore2010; @mossa2013; @nasuti2003; @pearson2016; @possamai2007; @ranjbar2002; @rodriguez-fuentes2015; @schwarzbacherova2019]. Whether these documented effects are mediated through their primary molecular targets or independently is unclear. Indeed, for neonicotinoids and organophosphates there are theories for how primary target interaction could lead to free radical generation. For neonicotinoids, nicotinic acetylcholine receptor (nAChR) modulation by imidacloprid in *Drosophila melanogaster* neurons can result in Ca^2+^ influx. The same dose of imidacloprid increased superoxide levels in larval brains after 1h exposure [@martelli2020]. The proposed link between these two findings is Ca^2+^ influx can activate nitric oxide synthase producing nitric oxide (NO), which in turn can diffuse into mitochondria and inhibit complex IV of the electron transport chain (ETC), leading to free radical generation [@alderton2001; @cleeter1994; @sipos2003a]. Furthermore, artificially elevated intracellular Ca^2+^ levels could result in cytochrome c dissociation from the inner mitochondrial membrane resulting in oxidative phosphorylation breakdown at complex III, which would also produce reactive oxygen species (ROS) [@brookes2004]. This theory, however, is unproven. For organophosphates a similar speculative acetylcholinesterase (AChE) dependent mechanism of ROS generation exists: organophosphate dependent AChE inhibition results in elevated ACh levels, which hyper stimulates muscarinic signalling [@aroniadou-anderjaska2020]. This can lead to glutamatergic pathway activation, including the NMDA receptor, which when activated directly increases free radical production via NADPH oxidase activity and indirectly by elevating intracellular Ca^2+^ levels and activating nitric oxide synthase, as above [@dong2009; @evans2012; @girouard2009; @marino1998]. To support this, chlorpyrifos can increase basal intracellular calcium concentrations, NMDA antagonists have a protective effect against organophosphate induced ROS indices and mitochondrial complexes of the ETC are inhibited by acute organophosphate exposure [@aroniadou-anderjaska2020; @meijer2014a; @pearson2016]. Most strikingly, chronic low level exposure to dichlorvos raised intramitochondrial calcium levels, impaired ETC complexes, including complex IV, and decreased superoxide dismutase levels [@kaur2007]. Regardless of whether these theories are correct they highlight the difficulty of disentangling whether cytotoxicity, and its proximal causes, are downstream of primary target interactions or if unknown, independent secondary toxicity mechanisms are at play. A simple solution could be to perform cell toxicity testing in non-neuronal tissues. The pleiotropic nature of nAchRs and AChEs, supported by their broad expression in non-neuronal tissues, precludes this potential line of enquiry [@albuquerque2009; @bicker2004; @carvalho2005; @genever1999; @grisaru1999; @luo2021; @pickett2017; @soreq2001; @thullbery2005; @zhang2002; @zhang2017; @zotero-597]. Therefore, to identify cytotoxic mechanisms independent of primary targets, which are potentially relevant to many eukaryotes, we selected a model organism without the primary molecular targets of these three insecticide classes, Baker’s yeast, *S.cerevisiae*. *S.cerevisiae* share key features of cell biology with more complex eukaryotes such as cell cycle, apoptosis, metabolism, protein processing and degradation, vesicular trafficking and key signalling pathways [@barbieri2003; @brodsky2011; @chen2007; @devirgilio2006; @hartwell2005; @munoz2012; @petranovic2010]. 2696 human genes have *S.cerevisiae* orthologs and 47% of essential yeast genes with 1:1 yeast-human orthology could be humanized [@kachroo2015; @laurent2020]. Taking advantage of these similarities with other eukaryotes we screened eight insecticides (acetamiprid, chlorpyrifos, clothianidin, flupyradifurone, imidacloprid, malathion, tefluthrin, thiacloprid) from the three aforementioned chemical classes in the yeast strain BY4741 and its *pdr1$\Delta$pdr3$\Delta$* knockout to assess their effects on population growth. Zinc cluster transcription factors *PDR1* and *PDR3* are major regulators of ABC transporters, including *PDR5*, *PDR10* and *PDR15*, and provide resistance to many cytotoxic compounds, known as pleiotropic drug resistance [@balzi1987; @delaveau1994; @katzmann1994; @mamnun2002; @wolfger1997]. Where possible, on identification of insecticide sensitivity we calculated the 10% effect concentration (EC$\sf{_{10}}$), a key dosing estimate, and determined whether effects on cells were cytotoxic or cytostatic. We found thiacloprid and malathion significantly reduced *pdr1$\Delta$pdr3$\Delta$* population growth through a cytotoxic mechanism.
+
+# Materials and Methods
+## Yeast Strains
+Two strains were tested: parent strain BY4741 (*MATa his3$\Delta 1$ leu2$\Delta 0$ met15$\Delta 0$ ura3$\Delta 0$*) and a *pdr1$\Delta$pdr3$\Delta$* double knockout strain (*MATalpha his3$\Delta 1$ leu2$\Delta 0$ lys2$\Delta 0$ ura3$\Delta 0$ pdr1$\Delta ::KANMX4$ pdr3$\Delta ::hphMX6$*) synthesised from the transformation of the *pdr1$\Delta$* deletion collection strain, a BY4741 derivative [@brachmann1998; @winston1995; @winzeler1999].
+
+## Transformation
+The *pdr1$\Delta$pdr3$\Delta$* double knockout strain was synthesised using standard techniques and standard growth mediums [@gietz2007; @looke2011; @sherman2002]. PCR constructs and checks were synthesised and performed using primers purchased from Sigma-Aldrich and Q5 polymerase (NEB) or DreamTaq polymerase (ThermoFisher Scientific). Primer sequences and the linear construct used for the knockout of *PDR3* from the the *pdr1$\Delta$* deletion collection strain are listed in Supplementary Table 1. 
+
+## Media and Reagents
+Yeast were grown in standard yeast extract, peptone, dextrose (YPD) medium and cultured according to established techniques [@sherman2002]. Insecticides (acetamiprid, chlorpyrifos, clothianidin, flupyradifurone, imidacloprid, malathion, tefluthrin, thiacloprid) were purchased from Sigma-Aldrich (PESTANAL^\raisebox{.5pt}{\textcircled{\raisebox{-.9pt} {R}}}^, analytical standard). 0.5M insecticide stock solutions were created using either DMSO or Methanol, dependent on available solubility data. These were stored in the dark at 4$^\circ$C.
+
+## Growth Assay
+The whole growth assay was repeated eight times, using 96 well plates, to assess the reproducibility of insecticide effects on yeast growth. This is generally accepted to be more informative than using more wells on fewer days [@lazic2018]. BY4741 and *pdr1$\Delta$pdr3$\Delta$* were grown overnight at 30$^\circ$C, 225rpm to mid-log phase. 1x10^6^ cell/ml solutions and 2mM insecticide working solutions, containing 0.4% of both DMSO and Methanol, were prepared. Each day BY4741 and *pdr1$\Delta$pdr3$\Delta$* were assigned to three row blocks, which alternated every day. Within each row, treatments were randomly assigned to wells. This design accounted for any effect plate position could have had on the results. 100$\mu l$ of 2mM insecticide working solutions were added to the appropriate wells, then 100$\mu l$ of 1x10^6^ cell/ml yeast stock was added for a final well volume of 200$\mu l$. Final concentrations were 1mM insecticide and 0.2% DMSO and Methanol. Three technical replicates per day were performed for each insecticide. The median value of these was taken for analysis. Absorbance was measured at 600nm every 5 minutes for 16 hours at 30$^\circ$C using a Fluostar Omega Microplate Reader. Shaking was performed at 200rpm (double orbital) for 267 seconds of every 300 second measurement window. This was the maximum permitted shaking time for the number of well measurements required. From these measurements growth curves were constructed.
+Data formatting and analysis was performed in zsh and R (3.6.2 [@rcoreteam2020]). Key growth parameters were generated using the R package growthcurver (0.3.0 [@sprouffske2018]), which fits logistic models to the experimental growth curve data [@sprouffske2016]. From this, initial population size, maximum potential population size and intrinsic growth rate are estimated. These parameters are combined into a single metric, “area under the curve” (AUC), which provides an integrated measure of total population growth. This study selected AUC measurements calculated from the logistic curve (AUC-l), as opposed to the trapezoid based approach. A linear mixed model was constructed using lmerTest (3.1.3 [@kuznetsova2017]) (AUC-l ~ treatment * strain + (1|day)). Interaction term significance was assessed by performing an anova on the full model (AUC-l ~ treatment * strain + (1|day)) and a reduced model (AUC-l ~ treatment + strain + (1|day)). The continuous dependent variable was AUC-l and the fixed independent factors were treatment and strain. Day was included as a random effect. Post-hoc tests were performed using the package multcomp (1.4-15 [@hothorn2008]) via Satterthwaite's degrees of freedom method to compare each insecticide to the solvent control. A FDR correction was performed to account for multiple hypothesis testing with false discovery rate set to 0.05. To avoid confusion the pairwise comparison P values reported in the results section are Benjamini-Hochberg adjusted P values. These are not actual estimates of probability, rather if their value is lower than the false discovery rate, the test is significant [@zotero-836]. Model residuals were approximately normally distributed and variance was homogeneous. Therefore, the assumptions of linear modelling were met. ggplot2 (3.3.2 [@wickham2016]), ggpubr (0.4.0 [@kassambara2020]) and rstatix (0.6.0 [@kassambara2020a]) were used for data visualisation. 95% confidence intervals for each insecticide strain group were generated with boot (1.3-27 [@canty2021]) via nonparametric bootstrapping. All raw data and scripts used for analysis are available at XXXgithub.
+
+## Dose Response Assay
+The dose response assay was performed as described in the growth assay section except shaking was performed every 262s of each 300s kinetic window. This was due to an increased number of wells used per plate, which extended the measurement period, thereby decreasing the maximum possible shaking time. *pdr1$\Delta$pdr3$\Delta$* cells were treated over a range of thiacloprid concentrations (1mM, 0.85mM, 0.7mM, 0.55mM, 0.4mM, 0.25mM, 0.1mM and 0.01mM). Each column of a 96 well plate was a replicate and well treatment was randomised within column. The whole experiment was repeated twice and estimated parameters compared. AUC-l was again chosen as the response variable, with concentration as the predictor. The package drc (3.0-1 [@ritz2015]) was utilised to fit a 4 parameter log logistic model and estimate EC$\sf{_{10}}$, EC$\sf{_{20}}$ and EC$\sf{_{50}}$ values. Model residuals were normally distributed. Variance was not homogeneous and vcov. was set to sandwich (3.0-0[@zeileis2004; @zeileis2006; @zeileis2020]) to account for this and obtain robust standard errors. Plots were constructed using ggplot2 (3.3.2 [@wickham2016]).
+
+## Trypan Blue Exclusion Assay
+*pdr1$\Delta$pdr3$\Delta$* cells were cultured overnight, diluted and left for three hours to allow progression into cell cycle. Cells were centrifuged and the supernatant removed. 0.9ml of 1.11mM insecticide, or the equivalent concentration of solvent, and 0.1ml of 0.4% Trypan Blue dye were added for a final concentration of 1mM and 0.04% respectively. Final solvent concentration was 0.2%. After 10, 30, 60, 120 and 240 minutes samples were centrifuged and cells were sampled, fixed to glass sides with agar and imaged under a MICROSCOPE NAME using ZenPro imaging software (version X). The whole experiment was repeated twice. Non viable and viable cells were counted using  Icy (2.1.3.0) and the Manual Counting plugin. Fisher’s exact tests, and multiple comparisons, were performed for each timepoint with the package RVAideMemoire (0.9-79 [@herve2021]). Multiple comparisons involved performing 2x2 Fisher’s exact test for each pairwise comparison. P-values were adjusted for false discovery rate. Plots were visualised with ggplot2 (3.3.3 [@wickham2016]), viridisLite (0.3.0 [@garnier2018]), viridis (0.5.1 [@garnier2018a]), ggpubr (0.4.0 [@kassambara2020]) and rstatix (0.7.0 [@kassambara2020a]). Images were processed with Icy (2.1.3.0) and Inkscape (1.0rc1). 
+
+\clearpage
+
+# Results
+To test the sensitivity of BY4741 and *pdr1$\Delta$pdr3$\Delta$* to neonicotinoid, organophosphate and pyrethroid insecticides 1x10^5^ cells were treated for 16 hours with 1mM of each insecticide. Absorbance at 600nm, a proxy for culture turbidity, was measured every 5 minutes and growth curves were generated. From these growth curves, the total area under the curve (AUC-l) was selected as the most appropriate population growth metric because it combines effects on both lag phase length and population growth rate [@sprouffske2016; @toussaint2006]. A linear mixed model was constructed (AUC-l ~ treatment * strain + (1|day)) and the interaction term was found to be significant (P<2.2x10^-16^), conveying that each strain responded differently to insecticide treatment. After the variance explained by the fixed effects (strain and treatment) was accounted for, the difference between day explained 68.4% of the remaining variance. The potential reasons behind this large day effect are considered in the discussion. The insecticide sensitivity screen in BY4741 at 1mM showed no inhibitory effect on AUC-l for any of the insecticides (Figure 1a). Chlorpyrifos (112.22, *P*=.0017) and tefluthrin (92.68, *P*=.011) did, however, have a significant stimulatory effect on BY4741. The *pdr1$\Delta$pdr3$\Delta$* knockout displayed markedly different results with the stimulatory effect of chlorpyrifos absent (1.01, *P*=.97) and malathion (-112.55, *P*=.0017) and thiacloprid (-433.55, *P*=9.8x10^-26^) significantly inhibiting population growth (Figure 1b). Tefluthrin was still stimulatory (111.80, *P*=.0017). The inhibitory effect of thiacloprid at 1mM was so pronounced that growth was completely curtailed in comparison to the control (Supplementary Figure 1). A control without equivalent concentrations of solvents (0.2% DMSO and methanol) was included in the screen for both strains and compared to the control including solvent. There was no difference in growth between these two groups indicating that the solvents alone at this concentration had no significant effect for either strain (BY4741, 1.17, *P*=.97 | *pdr1$\Delta$pdr3$\Delta$*, 41.8, *P*=.35). Tables of pairwise comparisons for insecticides against the appropriate control for BY4741 and *pdr1$\Delta$pdr3$\Delta$* are outlined in Supplementary Tables 2 and 3. 
+
+![BY4741 and *pdr1$\Delta$pdr3$\Delta$* Insecticide Sensitivity Screens](images/screen/by_pdr_screen_combined_for_report_3inch_wid.pdf) 
+
+\clearpage
+
+Because complete growth inhibition was achieved on 1mM thiacloprid treatment a dose response assay was performed to estimate the EC$\sf{_{10}}$, which is commonly used as an analog for the lowest concentration found to have an effect (Figure 2). This metric is preferable to the more traditional approach of defining a no observed effect concentration (NOEC) because it relies less on experimental design, utilising the whole concentration response curve to calculate its estimates instead of only one concentration point, confidence intervals (CIs) can be calculated and it is more robust to random variation within treatment groups [@2015; @beasley2015; @tanaka2018]. EC$\sf{_{10}}$ was estimated to be 0.153mM (CI = 0.125 to 0.182) for thiacloprid, equivalent to 38666ppb [slight error. Need to weigh a litre of media to calculate the kg, will be heavier than 1L of water, ppb will be lower than reported here]. EC$\sf{_{20}}$ and EC$\sf{_{50}}$ were 0.201 (CI = 0.174 to 0.228) and 0.319 (CI = 0.294 to 0.343) respectively. Supplementary Table 4 lists the 4 parameters of the log logistic model and their 95% CIs.
+
+![BY4741 and *pdr1$\Delta$pdr3$\Delta$* Insecticide Sensitivity Screens](images/drc/drc_3inch_wid.pdf) 
+
+To determine broadly through which mechanisms 1mM thiacloprid and malathion were suppressing *pdr1$\Delta$pdr3$\Delta$* population growth a 4 hour trypan blue exclusion time course assay was performed (Figure 3). Trypan blue is a membrane impermeable dye and therefore excluded from the cytoplasm of viable cells with intact membranes. If the dye is taken up by cells their membranes are compromised and they are classified as non-viable [@strober1997]. 1mM thiacloprid clearly increased the proportion of non viable cells after 30 minutes in comparison to the control (control-30m (non-viable proportion (NVP) = 1.33x10^-2^) vs thiacloprid-30m (NVP = 0.301), *P*=1.12x10^-26^). Cytotoxicity increased for thiacloprid over the 4 hours so much so that 77% of cells were non-viable after 4 hours (control-4h (NVP = 7.92x10^-3^) vs thiacloprid-4h (NVP = 0.770), *P*=9.40x10^-71^). 
+
+![BY4741 and *pdr1$\Delta$pdr3$\Delta$* Insecticide Sensitivity Screens](images/trypan/timecourse_plot_with_microscope_images_3inch_wid.pdf) 
+
+\clearpage
+
+The intracellular presence of the dye is clearest when viewing the red fluorescence images (Figure 3b): red fluorescence is emitted when the dye interacts with intracellular proteins [@avelar-freitas2014]. Trypan blue also emits red fluorescence on chitin and glucan binding, which are components of the yeast cell wall [@liesche2015]. Consequently, cells were only counted as non viable if the whole cell emitted red fluorescence and if this decision was supported by cell morphology, visualised through the Differential Interference Contrast (DIC) channel (Figure 3b). 1mM Malathion only increased cytotoxicity after 2 hours (control-2h (NVP = 0) vs malathion-2h (NVP = 5.05x10^-2^), *P*=1.91x10^-2^), although the proportion of non viable cells continued to increase with 11.6% of cells non-viable after 4 hours (control-4h (NVP = 7.92x10^-3^) vs malathion-4h (NVP = 0.116), *P*=1.51x10^-7^). The proportion of non viable cells after 2 hour malathion treatment remained significant even when compared to the control with the highest non-viable ratio, control-30m (control-30m (NVP = 1.33x10^-2^) vs malathion-2h (NVP = 5.05x10^-2^), *P*=.0451). This suggests 2 hour malathion treatment was cytotoxic and not just an artifact of the low control-2h NVP. A full list of NVPs and pairwise comparison significance tests are displayed in Supplementary Tables 5 and 6. 
+
+# Discussion
+The findings of this study display that thiacloprid, and to a lesser extent malathion, inhibit *S.cerevisiae* population growth through a cytotoxic mechanism. Cytotoxicity was clearly present after 30 minutes and 240 minutes (although significant after 120 minutes) for thiacloprid and malathion respectively. Thiacloprid was the strongest inhibitor of *S.cerevisiae* growth for the insecticides tested with 0.153mM causing 10% growth inhibition. The distinct responses of *pdr1$\Delta$pdr3$\Delta$* and BY4741 to thiacloprid and malathion show that knocking out *PDR1* and *PDR3*, and disrupting gene expression of efflux transporters regulated by them, sensitises *S.cerevisiae* to these insecticides. This strongly suggests that these insecticides exert their effect intracellularly and in BY4741 efflux transporters under the transcriptional control of *PDR1* and *PDR3* protect the cell by preventing intracellular thiacloprid and malathion accumulation. If thiacloprid and malathion cytotoxicity was mediated extracellularly, through membrane disruption for example, their effects would have been comparable between *pdr1$\Delta$pdr3$\Delta$* and BY4741, which was not the case. On a technical note, for the insecticide sensitivity screen there was a large day effect. For example, day 5 had the highest AUC-l values. The reasons behind this are unclear but it could have been due to inaccuracy of the spectrophotometer used during culture stock preparation, inaccuracy of the haemocytometer used to check the accuracy of the aforementioned spectrophotometer or insufficient mixing of the prepared stock culture before well addition. Nevertheless, insecticide effects exhibited the same direction across all days. The presence of *pdr1$\Delta$pdr3$\Delta$* population growth inhibition via cytotoxicity demonstrates that toxicity mechanisms independent of primary molecular targets exist in a eukaryote for these two insecticides. Two broad options exist for how this cytotoxicity occurs: there are intracellular molecular targets in *S.cerevisiae* that share a degree of structural similarity to the insecticide binding sites of nAchR and AchE, or there are some other, currently undescribed targets structurally unrelated to nAchR and AchE. The first option is unlikely because if proteins existed with conformational similarities to the usual insecticide molecular targets, it would be expected for other members of these insecticide classes, which target the same binding sites, to also exhibit growth inhibition in *S.cerevisiae*. None of the other neonicotinoids or organophosphates tested caused growth inhibition in either strain. In fact, chlorpyrifos had an unexpected stimulatory effect in BY4741. Taken together, these observations suggest that thiacloprid and malathion cause cytotoxicity via mechanisms unrelated to their primary molecular targets. What these are is undetermined but thiacloprid has been shown to bind to the minor groove of DNA *in vitro* [@verebova2019]. For both insecticides oxidative stress has been linked to their cytotoxic effects in multiple studies, though whether these effects are downstream of their primary molecular targets, as outlined in the introduction, in unclear [@blasiak1999; @fortunato2006; @moore2010; @nili-ahmadabadi2013; @possamai2007; @schwarzbacherova2019; @aydin2011]. 
+
+In the case of thiacloprid, the relevance of this study to environmental exposure scenarios is questionable due to the disparity between the concentration found to exert an effect and those detected in the environment. The maximal detected environmental concentration found on a literature search was 1002.2ppb, in pollen after foliar spray application [@pohorecka2012]. This, however, was the maximal concentration detected not the median concentration of the study, which was 4.1ppb, three orders of magnitude lower. For the toxicity mechanisms observed in the ppm range to be relevant to environmental exposure thiacloprid would have to persist and accumulate in a medium, such as soil or water. Pollen and nectar are the most likely off target mediums to contain maximal environmental concentrations for two reasons: thiacloprid is most commonly applied as a foliar spray and it has a short half life in soil, estimated to be between 0.88-27 days [@elbert2000; @goulson2013; @lewis2016; @motoki2016]. Indeed, one study found that 98.8% of thiacloprid was degraded by unsterilised soil in 15 days [@liu2011]. This is supported by low concentrations detected in water systems after nearby apple orchard usage and a lack of detection in soil samples from a study in the Phillipines, despite other neonicotinoids being present [@bonmatin2021; @suess2006]. There is limited evidence to support ppm exposure to malathion. Malathion has been detected in the ppm range in fruits, vegetables, dead honey bees and agricultural soils [@belanger1990; @carman1981; @gebara2005; @ghini2004; @sanghi2001; @sanghi2001a]. It must be stressed, however, that the majority of monitoring studies do not corroborate these findings, suggesting that ppm malathion concentrations are infrequent [@pubchema]. To support this, the reported half life of malathion was 1.33-7.6 for soil, depending on the soil type and season, 2 days for seawater and 9.73-10.87 days for freshwater [@bradman1994; @kaur1998; @sun2012; @cotham1989; @medina1999]. A possible real world exposure scenario where beneficial arthropods could be exposed to ppm insecticide concentrations is via foraging water from crop guttation droplets [@girolami2009; @tapparo2011; @wirtz2018]. One study observed honey bees placed in the vicinity of oil seed rape and cereal crops collecting water from guttation, dew or raindrops present on the crops [@joachimsmeier2012]. Another more comprehensive study where honey bee colonies were placed in the proximity of crops during the guttation period found no effect on colony health or strength and did not observe guttation water collection by bees, despite efforts to capture this behaviour [@pistorius2012].
+
+On the balance of evidence it is unlikely that thiacloprid and malathion are found regularly in the ppm range in the environment. Of course, there is a place for studies investigating the cellular effects of high insecticide concentrations for modelling poisoning scenarios, most likely through occupational exposure, but it is hard to justify exploring these effects mechanistically from an environmental exposure standpoint. Using this reasoning we decided not to investigate further the mechanisms underlying thiacloprid and malathion induced cytotoxicity in *S.cerevisiae*. For the insecticide effects discovered in this study to be relevant to organisms of ecological interest most likely to encounter high insecticide concentrations, such as pollinator species for thiacloprid, an unrealistic assumption would have to be met: that differences in cellular characteristics between yeast and more ecologically relevant organisms (EROs) can account for the discrepancy between effect concentration and actual recorded environmental levels. In other words, that ppm range exposure (thiacloprid EC$\sf{_{10}}$ = 38.7ppm for *pdr1$\Delta$pdr3$\Delta$*) in *S.cerevisiae* is somehow equivalent to ppb range exposure in EROs at the cellular level. For this to be true there would have to be stark differences in cellular insecticide absorption rates between *S.cerevisiae* and EROs leading to comparable intracellular concentrations after exposure levels differing by three orders of magnitude. An obvious morphological cellular difference between *S.cerevisiae* and EROs is the cell wall. Removing the cell wall from *S.cerevisiae*, through lyticase application to produce spheroplasts, did confer 4-600 fold sensitivity, depending on the strain, to the small hydrophilic antitumour compound bleomycin [@aouida2003]. Whether the cell wall provides a similar protective effect to thiacloprid is uncertain. The cell wall is more commonly known to protect against macromolecules, an example of this being its contribution to nisin (a polypeptide) resistance [@dielbandhoesing1998]. Even if the cell wall could account for a thousand fold difference between extracellular to intracellular insecticide concentration ratios for *S.cerevisiae* and EROs this idea has another assumption: that cytotoxicity observed in *S.cerevisiae* is mediated through perturbing processes conserved between EROs and *S.cerevisiae*, which may not be the case. Together, the chance of these two assumptions both being correct is slim. Something not touched upon until now was the surprising stimulatory effect of tefluthrin for both strains. How this is driven is unknown and no similar findings reporting stimulatory effects of pyrethroids on yeasts exist. Considering the high concentration applied to yield this stimulatory effect, the importance of this finding is negligible. 
+
+In conclusion, thiacloprid, and to a lesser degree malathion, exposure in the ppm range leads to *S.cerevisiae* population growth inhibition through a cytotoxic mechanism. These insecticide cytotoxicity mechanisms are independent of their usual primary targets. The relevance of these mechanisms to environmentally realistic exposure scenarios, however, is unlikely. Consequently, we decided not to pursue this line of investigation further. 
+
+\clearpage
+
+# Supplementary Material
+\beginsupplement
+
+\footnotesize 
+
+**Name**|**Sequence**
+:-----:|:-----:
+ | 
+Used During Linear Construct Synthesis| 
+pdr3-hygcas-forward-primer|cgacaactgcatcagcagttttattaattttttct\
+tattgcgtgaccgcagacatggaggcccagaatac
+pdr3-hygcas-reverse-primer|gtgtcccatttactatggttatgctctgcttccct\
+attttctttgcgtttcagtatagcgaccagcattc
+ | 
+Transforming Linear Construct|cgacaactgcatcagcagttttattaattttttcttattgc\
+                              gtgaccgcagacatggaggcccagaataccctccttgacagt\
+                              cttgacgtgcgcagctcaggggcatgatgtgactgtcgcccgt\
+                              acatttagcccatacatccccatgtataatcatttgcatccat\
+                              acattttgatggccgcacggcgcgaagcaaaaattacggctcc\
+                              tcgctgcagacctgcgagcagggaaacgctcccctcacagacg\
+                              cgttgaattgtccccacgccgcgcccctgtagagaaatataaa\
+                              aggttaggatttgccactgaggttcttctttcatatacttcct\
+                              tttaaaatcttgctaggatacagttctcacatcacatccgaac\
+                              ataaacaaccatgggtaaaaagcctgaactcaccgcgacgtct\
+                              gtcgagaagtttctgatcgaaaagttcgacagcgtctccgacc\
+                              tgatgcagctctcggagggcgaagaatctcgtgctttcagctt\
+                              cgatgtaggagggcgtggatatgtcctgcgggtaaatagctgc\
+                              gccgatggtttctacaaagatcgttatgtttatcggcactttg\
+                              catcggccgcgctcccgattccggaagtgcttgacattgggga\
+                              attcagcgagagcctgacctattgcatctcccgccgtgcacag\
+                              ggtgtcacgttgcaagacctgcctgaaaccgaactgcccgctg\
+                              ttctgcagccggtcgcggaggccatggatgcgatcgctgcggc\
+                              cgatcttagccagacgagcgggttcggcccattcggaccgcaa\
+                              ggaatcggtcaatacactacatggcgtgatttcatatgcgcga\
+                              ttgctgatccccatgtgtatcactggcaaactgtgatggacga\
+                              caccgtcagtgcgtccgtcgcgcaggctctcgatgagctgatg\
+                              ctttgggccgaggactgccccgaagtccggcacctcgtgcacg\
+                              cggatttcggctccaacaatgtcctgacggacaatggccgcat\
+                              aacagcggtcattgactggagcgaggcgatgttcggggattcc\
+                              caatacgaggtcgccaacatcttcttctggaggccgtggttgg\
+                              cttgtatggagcagcagacgcgctacttcgagcggaggcatccg\
+                              gagcttgcaggatcgccgcggctccgggcgtatatgctccgca\
+                              ttggtcttgaccaactctatcagagcttggttgacggcaattt\
+                              cgatgatgcagcttgggcgcagggtcgatgcgacgcaatcgtc\
+                              cgatccggagccgggactgtcgggcgtacacaaatcgcccgca\
+                              gaagcgcggccgtctggaccgatggctgtgtagaagtactcgc\
+                              cgatagtggaaaccgacgccccagcactcgtccgagggcaaag\
+                              gaataatcagtactgacaataaaaagattcttgttttcaagaa\
+                              cttgtcatttgtatagtttttttatattgtagttgttctattt\
+                              taatcaaatgttagcgtgatttatattttttttcgcctcgaca\
+                              tcatctgcccagatgcgaagttaagtgcgcagaaagtaatatca\
+                              tgcgtcaatcgtatgtgaatgctggtcgctatactgaaacgca\
+                              aagaaaatagggaagcagagcataaccatagtaaatgggacac
+ | 
+PCR Check| 
+Positive Control| 
+kan-forward|cggcaaaacagcattccagg
+pdr-1-downstream-reverse|tcattgttgaatgatagctacgg
+Negative Control| 
+pdr-3-upstream-forward|attttttcttattgcgtgac
+pdr-3-downstream-reverse|ctgcttccctattttctttg
+Test| 
+pdr3-upstream-forward|attttttcttattgcgtgac
+hyg-reverse|tatccacgccctcctacatc
+
+\begin{center} 
+Table S1: Sequences of Primers and Transformation Constructs
+\end{center}
+
+\clearpage
+
+\normalsize 
+
+**Treatment**|**Estimate**|**Std. Error**|**df**|**t value**|**Pr(>t)**
+:-----:|:-----:|:-----:|:-----:|:-----:|:-----:
+(Intercept)|442.1449212|38.36421164|12.14223088|11.52493176|6.74E-08
+acetamiprid|18.10156659|30.51083044|114.0000001|0.593283314|0.554166805
+chlorpyrifos|112.216646|30.51083044|114.0000001|3.677928275|0.000360317
+clothianidin|47.36767966|30.51083044|114.0000001|1.552487395|0.123317476
+controlnosolv|1.171802106|30.51083044|114.0000001|0.038406103|0.969431071
+flupyradifurone|63.63775001|30.51083044|114.0000001|2.085742967|0.039233107
+imidacloprid|25.25353895|30.51083044|114.0000001|0.827690974|0.409574844
+malathion|68.70971723|30.51083044|114.0000001|2.251977945|0.026238948
+tefluthrin|92.67833412|30.51083044|114.0000001|3.037555281|0.00295706
+thiacloprid|-18.95746647|30.51083044|114.0000001|-0.621335644|0.535619267
+
+\begin{center} 
+Table S2: BY4741 Estimates and Contrasts In Comparison to the Control for Initial Insecticide Sensitivity Screen
+\end{center}
+
+**Treatment**|**Estimate**|**Std. Error**|**df**|**t value**|**Pr(>t)**
+:-----:|:-----:|:-----:|:-----:|:-----:|:-----:
+(Intercept)|453.7743547|38.36421162|12.14223093|11.82806411|5.04E-08
+acetamiprid|-36.90893457|30.51083044|114|-1.209699442|0.228896827
+chlorpyrifos|1.010459544|30.51083044|114|0.033118061|0.973638356
+clothianidin|6.72076726|30.51083044|114|0.220274806|0.826051128
+controlnosolv|41.77848729|30.51083044|114|1.369300235|0.17359703
+flupyradifurone|18.36251682|30.51083044|114|0.601836022|0.548478352
+imidacloprid|17.70507529|30.51083044|114|0.580288214|0.562865529
+malathion|-112.5520561|30.51083044|114|-3.688921426|0.0003467
+tefluthrin|111.799948|30.51083044|114|3.664270895|0.000377941
+thiacloprid|-433.5536428|30.51083044|114|-14.20982768|5.44E-27
+
+\begin{center} 
+Table S3: \emph{pdr1$\Delta$pdr3$\Delta$} Estimates and Contrasts In Comparison to the Control for Initial Insecticide Sensitivity Screen
+\end{center}
+
+**Parameter**|**Estimate**|**Std. Error**|**t-value**|**p-value**|**2.50%**|**97.50%**
+:-----:|:-----:|:-----:|:-----:|:-----:|:-----:|:-----:
+b:(Intercept)|3.005321042|0.290422828|10.34808822|4.05E-16|2.426893851|3.583748233
+c:(Intercept)|12.28489239|13.80074497|0.89016154|0.376188371|-15.20167336|39.77145814
+d:(Intercept)|561.7045529|9.94964126|56.45475432|4.14E-64|541.8881249|581.5209808
+e:(Intercept)|0.318506257|0.010735994|29.66714278|7.72E-44|0.297123673|0.339888842
+
+\begin{center} 
+Table S4: 4 Parameters of the Log Logistic Model and Their 95 \% CIs for Dose Response Curve of Thiacloprid for \emph{pdr1$\Delta$pdr3$\Delta$}
+\end{center} 
+
+\clearpage
+
+**Sample**|**Viable**|**Non.Viable**|**Total**|**Time**|**Non\_Niable\_Proportion**
+:-----:|:-----:|:-----:|:-----:|:-----:|:-----:
+cont-10m|302|3|305|10|0.009836066
+mala-10m|831|6|837|10|0.007168459
+thia-10m|223|5|228|10|0.021929825
+cont-30m|297|4|301|30|0.013289037
+mala-30m|216|6|222|30|0.027027027
+thia-30m|238|103|342|30|0.301169591
+cont-1h|438|2|440|60|0.004545455
+mala-1h|242|0|242|60|0
+thia-1h|160|109|268|60|0.406716418
+cont-2h|117|0|117|120|0
+mala-2h|94|5|99|120|0.050505051
+thia-2h|33|58|91|120|0.637362637
+cont-4h|376|3|379|240|0.007915567
+mala-4h|122|16|138|240|0.115942029
+thia-4h|33|97|126|240|0.76984127
+
+\begin{center} 
+Table S5: Cells Counts and Proportion of Non-Viable Cells for \emph{pdr1$\Delta$pdr3$\Delta$} on Thiacloprid and Malathion Treatment
+\end{center} 
+
+**Comparison**|**p.Fisher**|**fdr**
+:-----:|:-----:|:-----:
+cont-10m : mala-10m|0.707|0.707
+cont-10m : thia-10m|0.297|0.594
+cont-30m : mala-30m|0.336|0.336
+cont-30m : thia-30m|5.58E-27|1.12E-26
+cont-1h : mala-1h|0.541|0.541
+cont-1h : thia-1h|2.10E-50|4.20E-50
+cont-2h : mala-2h|0.0191|0.0191
+cont-2h : thia-2h|3.69E-28|7.38E-28
+cont-4h : mala-4h|1.51E-07|1.51E-07
+cont-4h : thia-4h|4.70E-71|9.40E-71
+
+\begin{center} 
+Table S6: Pairwise Comparisons for Fisher's Exact Tests for \emph{pdr1$\Delta$pdr3$\Delta$} on Thiacloprid and Malathion Treatment
+\end{center}
+
+\clearpage
+
+![Exemplar Growth Curves for Control and Thiacloprid *pdr1$\Delta$pdr3$\Delta$*](images/supp/growth_curves_together_3inch_wid.pdf) 
+
+\clearpage 
+
+# References
