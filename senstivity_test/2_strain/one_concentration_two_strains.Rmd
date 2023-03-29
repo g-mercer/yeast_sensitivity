@@ -33,7 +33,7 @@ I combined all the replicates using zsh to output a formatted, compiled csv file
 #!/usr/bin/env zsh
 
 # setwd
-cd /Users/guy/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/2_strain
+cd /Users/guymercer/projects/yeast_sensitivity/senstivity_test/2_strain/
 
 ./WHATIDID.sh 
 ```
@@ -54,9 +54,6 @@ library(cowplot)
 ``` 
 
 ```{r}
-# set wd
-setwd("~/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/2_strain/")
-
 # read csv
 insect_sens <- read.csv(file = "./results/formatted_compiled.csv", header = FALSE, stringsAsFactors = FALSE)
 
@@ -212,7 +209,7 @@ colnames(thia_control) [1] <- "time"
 thia_control <- thia_control [,c(1,2,22)]
 
 # plots
- pdf(file = "/Users/guy/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/2_strain/example_growth_curves.pdf",   # The directory you want to save the file in
+ pdf(file = "./example_growth_curves.pdf",   # The directory you want to save the file in
      width = 6, # The width of the plot in inches
      height = 4) # The height of the plot in inches
 
@@ -713,7 +710,7 @@ pdr_plot <- knell_plot_function(ci_df_pdr, data_for_stats_pdr, "steelblue", "fir
 by_plot <- knell_plot_function(ci_df_by, data_for_stats_by, "firebrick4", "steelblue", p_values_plot_overlay_by, "BY4741", "a) ")
 
 # plots
- pdf(file = "/Users/guy/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/2_strain/pdr.pdf",   # The directory you want to save the file in
+ pdf(file = "./pdr.pdf",   # The directory you want to save the file in
      width = 6, # The width of the plot in inches
      height = 4) # The height of the plot in inches
 
@@ -721,7 +718,7 @@ pdr_plot
 
  dev.off()
 
- pdf(file = "/Users/guy/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/2_strain/by.pdf",   # The directory you want to save the file in
+ pdf(file = "./by.pdf",   # The directory you want to save the file in
      width = 6, # The width of the plot in inches
      height = 4) # The height of the plot in inches
 
@@ -736,11 +733,11 @@ Before getting carried away with any of these results remember that 1mM thiaclop
 # generating supplementary tables 
 p_by_table <- p_by [1:10,]
 
-write.csv(p_by_table, "~/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/2_strain/p_by_table.csv", row.names = TRUE)
+write.csv(p_by_table, "./p_by_table.csv", row.names = TRUE)
 
 p_pdr_table <- p_pdr [1:10,]
 
-write.csv(p_pdr_table, "~/Documents/phd/DEG_yeast_insecticide_expt/senstivity_test/2_strain/p_pdr_table.csv", row.names = TRUE)
+write.csv(p_pdr_table, "./p_pdr_table.csv", row.names = TRUE)
 
 ```
 
@@ -769,4 +766,3 @@ plot_grid(
   rel_heights = c(0.1, 1)
 )
 ```
-

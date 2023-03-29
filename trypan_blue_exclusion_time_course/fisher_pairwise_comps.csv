@@ -1,0 +1,11 @@
+"Comparison","p.Fisher","fdr"
+"cont-10m : mala-10m",0.707,0.707
+"cont-10m : thia-10m",0.297,0.594
+"cont-30m : mala-30m",0.336,0.336
+"cont-30m : thia-30m",5.58e-27,1.116e-26
+"cont-1h : mala-1h",0.541,0.541
+"cont-1h : thia-1h",2.1e-50,4.2e-50
+"cont-2h : mala-2h",0.0191,0.0191
+"cont-2h : thia-2h",3.69e-28,7.38e-28
+"cont-4h : mala-4h",1.51e-07,1.51e-07
+"cont-4h : thia-4h",4.7e-71,9.4e-71

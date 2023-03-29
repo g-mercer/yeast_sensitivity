@@ -208,7 +208,7 @@ with_time_min_col$insecticide <- relevel(with_time_min_col$insecticide, "cont")
 library(ggpubr)
 library(viridis)
 
-cairo_pdf(file = "/Users/guy/Documents/phd/DEG_yeast_insecticide_expt/trypan_blue_exclusion_time_course/timecourse.pdf",   # The directory you want to save the file in
+cairo_pdf(file = "./timecourse.pdf",   # The directory you want to save the file in
     width = 6, # The width of the plot in inches
     height = 4) # The height of the plot in inches
 
@@ -272,7 +272,7 @@ fisher.test(fisher_df_mala_sig_check,
 # supplementary tables
 NVPs <- with_time_min_col [,2:6]
 
-write.csv(NVPs, "~/Documents/phd/DEG_yeast_insecticide_expt/trypan_blue_exclusion_time_course/proportions.csv", row.names = TRUE)
+write.csv(NVPs, "./proportions.csv", row.names = TRUE)
 
 complete_fisher_df <- tibble()
 
@@ -283,6 +283,6 @@ for (i in 1:length(fisher_output)) {
   complete_fisher_df <- rbind(complete_fisher_df, fisher_output_timepoint)
 } 
 
-write.csv(complete_fisher_df, "~/Documents/phd/DEG_yeast_insecticide_expt/trypan_blue_exclusion_time_course/fisher_pairwise_comps.csv", row.names = FALSE)
+write.csv(complete_fisher_df, "./fisher_pairwise_comps.csv", row.names = FALSE)
 ```
 

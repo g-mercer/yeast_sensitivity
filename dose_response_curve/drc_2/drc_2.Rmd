@@ -93,7 +93,7 @@ I combined all the replicates using zsh to output a formatted, compiled a csv fi
 #!/usr/bin/env zsh
 
 # setwd
-cd ~/Documents/phd/DEG_yeast_insecticide_expt/dose_response_curve/drc_2
+cd /Users/guymercer/projects/yeast_sensitivity/dose_response_curve/drc_2/
 
 ./WHATIDID.sh 
 ``` 
@@ -398,7 +398,7 @@ newdata$pmax <- pm[,3]
 # plot curve
 library(ggplot2)
 
-cairo_pdf(file = "/Users/guy/Documents/phd/DEG_yeast_insecticide_expt/dose_response_curve/drc_2/drc.pdf",   # The directory you want to save the file in
+cairo_pdf(file = "./drc.pdf",   # The directory you want to save the file in
     width = 6, # The width of the plot in inches
     height = 4) # The height of the plot in inches
 
@@ -443,6 +443,6 @@ confint(thia_ll4)
 
 complete_summary_ll4 <- cbind(summary(thia_ll4) [[3]], confint(thia_ll4))
 
-write.csv(complete_summary_ll4, "~/Documents/phd/DEG_yeast_insecticide_expt/dose_response_curve/drc_2/complete_summary_ll4.csv", row.names = TRUE)
+write.csv(complete_summary_ll4, "./complete_summary_ll4.csv", row.names = TRUE)
 ```
 
